@@ -36,8 +36,16 @@ func removeIpListDependencies(ctx context.Context, api *cloudflare.API, conf *bl
 
 	for _, rule := range rules {
 		if rule.Filter.Expression == "ip.src in $crowdsec" {
-			api.DeleteFirewallRule(ctx, conf.CloudflareZoneID, rule.ID)
-			api.DeleteFilter(ctx, conf.CloudflareZoneID, rule.Filter.ID)
+			err := api.DeleteFirewallRule(ctx, conf.CloudflareZoneID, rule.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = api.DeleteFilter(ctx, conf.CloudflareZoneID, rule.Filter.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			break
 		}
 	}
@@ -59,7 +67,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfApi, _ := cloudflare.NewWithAPIToken(conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
+
+	cfApi, err := cloudflare.NewWithAPIToken(conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	clearExistingCrowdSecIpList(ctx, cfApi, conf)
 	ipList, err := cfApi.CreateIPList(ctx, "crowdsec", "IP list managed by crowdsec bouncer", "ip")
@@ -129,7 +141,10 @@ func main() {
 		}
 
 		if len(deleteIps) > 0 {
-			cfApi.DeleteIPListItems(ctx, ipList.ID, cloudflare.IPListItemDeleteRequest{Items: deleteIps})
+			_, err := cfApi.DeleteIPListItems(ctx, ipList.ID, cloudflare.IPListItemDeleteRequest{Items: deleteIps})
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 	}
