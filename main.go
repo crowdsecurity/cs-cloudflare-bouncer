@@ -9,7 +9,7 @@ import (
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 )
 
-func clearExistingCrowdSecIpList(ctx context.Context, api *cloudflare.API) {
+func clearExistingCrowdSecIpList(ctx context.Context, api *cloudflare.API, conf *blockerConfig) {
 	ipLists, err := api.ListIPLists(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -20,11 +20,27 @@ func clearExistingCrowdSecIpList(ctx context.Context, api *cloudflare.API) {
 		return
 	}
 
- 	_, err = api.DeleteIPList(ctx, id)
+	removeIpListDependencies(ctx, api, conf)
+
+	_, err = api.DeleteIPList(ctx, id)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func removeIpListDependencies(ctx context.Context, api *cloudflare.API, conf *blockerConfig) {
+	rules, err := api.FirewallRules(ctx, conf.CloudflareZoneID, cloudflare.PaginationOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	for _, rule := range rules {
+		if rule.Filter.Expression == "ip.src in $crowdsec" {
+			api.DeleteFirewallRule(ctx, conf.CloudflareZoneID, rule.ID)
+			api.DeleteFilter(ctx, conf.CloudflareZoneID, rule.Filter.ID)
+			break
+		}
+	}
 }
 
 func getCrowdSecIPListId(ipLists []cloudflare.IPList) (string, error) {
@@ -39,23 +55,20 @@ func getCrowdSecIPListId(ipLists []cloudflare.IPList) (string, error) {
 func main() {
 
 	ctx := context.Background()
-	conf, err := NewConfig("./conf.yaml")
+	conf, err := NewConfig("./cf.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
 	cfApi, _ := cloudflare.NewWithAPIToken(conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
 
-	clearExistingCrowdSecIpList(ctx, cfApi)
+	clearExistingCrowdSecIpList(ctx, cfApi, conf)
 	ipList, err := cfApi.CreateIPList(ctx, "crowdsec", "IP list managed by crowdsec bouncer", "ip")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ipFilters := make([]cloudflare.Filter, 1)
-	ipFilters[0] = cloudflare.Filter{Expression: "ip.src in $crowdsec"}
+	firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: "ip.src in $crowdsec"}, Action: "challenge"}}
 
-	firewallRules := make([]cloudflare.FirewallRule, 1)
-	firewallRules[0] = cloudflare.FirewallRule{Filter: ipFilters[0], Action: "challenge"}
 	_, err = cfApi.CreateFirewallRules(ctx, conf.CloudflareZoneID, firewallRules)
 
 	if err != nil {
@@ -95,7 +108,7 @@ func main() {
 		}
 
 		addIps := make([]cloudflare.IPListItemCreateRequest, 0)
-		for k, _ := range addIpsMap {
+		for k := range addIpsMap {
 			addIps = append(addIps, k)
 		}
 
@@ -111,7 +124,7 @@ func main() {
 		}
 
 		deleteIps := make([]cloudflare.IPListItemDeleteItemRequest, 0)
-		for k, _ := range deleteIpsMap {
+		for k := range deleteIpsMap {
 			deleteIps = append(deleteIps, k)
 		}
 
