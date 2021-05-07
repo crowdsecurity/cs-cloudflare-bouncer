@@ -9,16 +9,18 @@ import (
 )
 
 type blockerConfig struct {
-	CrowdSecLAPIUrl     string `yaml:"crowdsec_lapi_url"`
-	CrowdSecLAPIKey     string `yaml:"crowdsec_lapi_key"`
-	CloudflareAPIToken  string `yaml:"cloudfare_api_token"`
-	CloudflareAccountID string `yaml:"cloudfare_account_id"`
-	CloudflareZoneID    string `yaml:"cloudfare_zone_id"`
-	updateFrequency     time.Duration
-	UpdateFrequencyYAML string `yaml:"update_frequency"`
-	Action              string `yaml:"action"`
+	CrowdSecLAPIUrl      string `yaml:"crowdsec_lapi_url"`
+	CrowdSecLAPIKey      string `yaml:"crowdsec_lapi_key"`
+	CloudflareAPIToken   string `yaml:"cloudfare_api_token"`
+	CloudflareAccountID  string `yaml:"cloudfare_account_id"`
+	CloudflareZoneID     string `yaml:"cloudfare_zone_id"`
+	CloudflareIPListName string `yaml:"cloudfare_ip_list_name"`
+	updateFrequency      time.Duration
+	UpdateFrequencyYAML  string `yaml:"update_frequency"`
+	Action               string `yaml:"action"`
 }
 
+// NewConfig creates blockerConfig from the file at provided path
 func NewConfig(configPath string) (*blockerConfig, error) {
 	config := &blockerConfig{}
 
@@ -39,6 +41,10 @@ func NewConfig(configPath string) (*blockerConfig, error) {
 
 	if config.Action == "" {
 		config.Action = "block"
+	}
+
+	if config.CloudflareIPListName == "" {
+		config.CloudflareIPListName = "crowdsec"
 	}
 
 	return config, nil

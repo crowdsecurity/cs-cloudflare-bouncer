@@ -1,7 +1,13 @@
+# CrowdSec Config
 crowdsec_lapi_url:
-crowdsec_lapi_key: 
+crowdsec_lapi_key:
+
+# Cloudfare Config
 cloudfare_api_token: 
 cloudfare_account_id:
 cloudfare_zone_id:
+cloudfare_ip_list_name:
+
+# Bouncer Config
 update_frequency:
 action:
