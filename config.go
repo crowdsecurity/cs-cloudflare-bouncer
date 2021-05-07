@@ -16,8 +16,9 @@ type blockerConfig struct {
 	CloudflareZoneID     string `yaml:"cloudfare_zone_id"`
 	CloudflareIPListName string `yaml:"cloudfare_ip_list_name"`
 	updateFrequency      time.Duration
-	UpdateFrequencyYAML  string `yaml:"update_frequency"`
 	Action               string `yaml:"action"`
+	Daemon               bool   `yaml:"daemon"`
+	UpdateFrequencyYAML  string `yaml:"update_frequency"`
 }
 
 // NewConfig creates blockerConfig from the file at provided path
