@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -77,7 +78,7 @@ func removeIPListDependencies(ctx context.Context, cfAPI *cloudflare.API, conf *
 	}
 
 	for _, rule := range rules {
-		if rule.Filter.Expression == "ip.src in $crowdsec" {
+		if strings.Contains(rule.Filter.Expression, "$"+conf.CloudflareIPListName) {
 			err := cfAPI.DeleteFirewallRule(ctx, conf.CloudflareZoneID, rule.ID)
 			if err != nil {
 				return err
@@ -87,7 +88,6 @@ func removeIPListDependencies(ctx context.Context, cfAPI *cloudflare.API, conf *
 			if err != nil {
 				return err
 			}
-			break
 		}
 	}
 	return nil
@@ -212,7 +212,7 @@ func main() {
 			}
 		}
 	})
-	if conf.Daemon{
+	if conf.Daemon {
 		sent, err := daemon.SdNotify(false, "READY=1")
 		if !sent && err != nil {
 			log.Fatalf("Failed to notify: %v", err)
