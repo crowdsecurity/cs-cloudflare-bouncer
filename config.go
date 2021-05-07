@@ -12,6 +12,7 @@ type blockerConfig struct {
 	CrowdSecLAPIKey     string `yaml:"crowdsec_lapi_key"`
 	CloudflareAPIToken  string `yaml:"cloudfare_api_token"`
 	CloudflareAccountID string `yaml:"cloudfare_account_id"`
+	CloudflareZoneID    string `yaml:"cloudfare_zone_id"`
 	updateFrequency     time.Duration
 	UpdateFrequencyYAML string `yaml:"update_frequency"`
 }
