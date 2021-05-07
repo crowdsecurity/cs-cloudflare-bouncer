@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 type blockerConfig struct {
@@ -15,6 +16,7 @@ type blockerConfig struct {
 	CloudflareZoneID    string `yaml:"cloudfare_zone_id"`
 	updateFrequency     time.Duration
 	UpdateFrequencyYAML string `yaml:"update_frequency"`
+	Action              string `yaml:"action"`
 }
 
 func NewConfig(configPath string) (*blockerConfig, error) {
@@ -33,6 +35,10 @@ func NewConfig(configPath string) (*blockerConfig, error) {
 	config.updateFrequency, err = time.ParseDuration(config.UpdateFrequencyYAML)
 	if err != nil {
 		return nil, fmt.Errorf("invalid update frequency %s : %s", config.UpdateFrequencyYAML, err)
+	}
+
+	if config.Action == "" {
+		config.Action = "block"
 	}
 
 	return config, nil

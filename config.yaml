@@ -3,4 +3,5 @@ crowdsec_lapi_key:
 cloudfare_api_token: 
 cloudfare_account_id:
 cloudfare_zone_id:
-update_frequency: 
+update_frequency:
+action:

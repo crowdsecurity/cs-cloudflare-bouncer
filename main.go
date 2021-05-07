@@ -67,7 +67,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: "ip.src in $crowdsec"}, Action: "challenge"}}
+	firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: "ip.src in $crowdsec"}, Action: conf.Action}}
 
 	_, err = cfApi.CreateFirewallRules(ctx, conf.CloudflareZoneID, firewallRules)
 
