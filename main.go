@@ -18,19 +18,9 @@ import (
 
 var t tomb.Tomb
 
-func termHandler(sig os.Signal, ctx context.Context) error {
-	// if err := ctx.ShutDown(); err != nil {
-	// 	return err
-	// }
-	log.Infof("Shutting down\n")
-	return nil
-}
-
 func HandleSignals(ctx context.Context) {
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan,
-		syscall.SIGTERM)
-
+	signal.Notify(signalChan, syscall.SIGTERM)
 	exitChan := make(chan int)
 	go func() {
 		for {
@@ -38,14 +28,10 @@ func HandleSignals(ctx context.Context) {
 			switch s {
 			// kill -SIGTERM XXXX
 			case syscall.SIGTERM:
-				if err := termHandler(s, ctx); err != nil {
-					log.Fatalf("shutdown fail: %s", err)
-				}
 				exitChan <- 0
 			}
 		}
 	}()
-
 	code := <-exitChan
 	log.Infof("Shutting down firewall-bouncer service")
 	os.Exit(code)
