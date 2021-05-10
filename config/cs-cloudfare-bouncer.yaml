@@ -13,3 +13,6 @@ cloudfare_ip_list_name: crowdsec
 update_frequency: 10s
 action: block
 daemon: true
+log_mode: file
+log_dir: /var/log/
+log_level: info
