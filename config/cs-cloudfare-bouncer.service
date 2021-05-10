@@ -1,0 +1,10 @@
+[Unit]
+Description=CrowdSec bouncer for Cloudfare
+After=syslog.target crowdsec.service
+
+[Service]
+Type=notify
+ExecStart=${BIN} -c ${CFG}cs-cloudfare-bouncer.yaml
+
+[Install]
+WantedBy=multi-user.target
