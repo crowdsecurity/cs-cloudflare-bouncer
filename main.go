@@ -141,8 +141,7 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 
-	duration, _ := time.ParseDuration(conf.CloudflareUpdateFrequencyYAML)
-	cloudflareTicker := time.NewTicker(duration)
+	cloudflareTicker := time.NewTicker(conf.CloudflareUpdateFrequency)
 
 	go csLapi.Run()
 
