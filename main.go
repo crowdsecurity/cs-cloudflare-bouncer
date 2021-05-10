@@ -148,8 +148,8 @@ func main() {
 		for {
 			select {
 			case <-t.Dying():
-				log.Fatal("terminating bouncer process")
-				return nil
+				return errors.New("Tomb dying")
+	
 			case streamDecision := <-csLapi.Stream:
 				deleteIPMap := make(map[cloudflare.IPListItemDeleteItemRequest]bool)
 				addIPMap := make(map[cloudflare.IPListItemCreateRequest]bool)
