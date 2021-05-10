@@ -20,7 +20,7 @@ type bouncerConfig struct {
 	CloudflareZoneID              string `yaml:"cloudfare_zone_id"`
 	CloudflareIPListName          string `yaml:"cloudfare_ip_list_name"`
 	CloudflareUpdateFrequencyYAML string `yaml:"cloudflare_update_frequency"`
-	CloudflareUpdateFrequency     time.Duration
+	CloudflareUpdateFrequency     time.Duration `yaml:"-"`
 	Action                        string    `yaml:"action"`
 	Daemon                        bool      `yaml:"daemon"`
 	LogMode                       string    `yaml:"log_mode"`
