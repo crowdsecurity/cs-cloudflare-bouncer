@@ -1,16 +1,16 @@
 # CrowdSec Config
 crowdsec_lapi_url: http://localhost:8080/
 crowdsec_lapi_key: ${LAPI_KEY}
+crowdsec_update_frequency: 10s
 
 # Cloudfare Config
 cloudfare_api_token: ${CF_TOKEN}
 cloudfare_account_id: ${CF_ACC_ID}
 cloudfare_zone_id: ${CF_ZONE_ID}
-
+cloudflare_update_frequency: 30s
 cloudfare_ip_list_name: crowdsec
 
 # Bouncer Config
-update_frequency: 10s
 action: block
 daemon: true
 log_mode: file

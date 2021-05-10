@@ -12,19 +12,20 @@ import (
 )
 
 type bouncerConfig struct {
-	CrowdSecLAPIUrl      string          `yaml:"crowdsec_lapi_url"`
-	CrowdSecLAPIKey      string          `yaml:"crowdsec_lapi_key"`
-	CloudflareAPIToken   string          `yaml:"cloudfare_api_token"`
-	CloudflareAccountID  string          `yaml:"cloudfare_account_id"`
-	CloudflareZoneID     string          `yaml:"cloudfare_zone_id"`
-	CloudflareIPListName string          `yaml:"cloudfare_ip_list_name"`
-	updateFrequency      time.Duration
-	Action               string          `yaml:"action"`
-	Daemon               bool            `yaml:"daemon"`
-	UpdateFrequencyYAML  string          `yaml:"update_frequency"`
-	LogMode              string          `yaml:"log_mode"`
-	LogDir               string          `yaml:"log_dir"`
-	LogLevel             log.Level       `yaml:"log_level"`
+	CrowdSecLAPIUrl               string `yaml:"crowdsec_lapi_url"`
+	CrowdSecLAPIKey               string `yaml:"crowdsec_lapi_key"`
+	CrowdsecUpdateFrequencyYAML   string `yaml:"crowdsec_update_frequency"`
+	CloudflareAPIToken            string `yaml:"cloudfare_api_token"`
+	CloudflareAccountID           string `yaml:"cloudfare_account_id"`
+	CloudflareZoneID              string `yaml:"cloudfare_zone_id"`
+	CloudflareIPListName          string `yaml:"cloudfare_ip_list_name"`
+	CloudflareUpdateFrequencyYAML string `yaml:"cloudflare_update_frequency"`
+	CloudflareUpdateFrequency     time.Duration `yaml:"-"`
+	Action                        string    `yaml:"action"`
+	Daemon                        bool      `yaml:"daemon"`
+	LogMode                       string    `yaml:"log_mode"`
+	LogDir                        string    `yaml:"log_dir"`
+	LogLevel                      log.Level `yaml:"log_level"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
@@ -42,9 +43,14 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
 
-	config.updateFrequency, err = time.ParseDuration(config.UpdateFrequencyYAML)
+	config.CloudflareUpdateFrequency, err = time.ParseDuration(config.CrowdsecUpdateFrequencyYAML)
 	if err != nil {
-		return nil, fmt.Errorf("invalid update frequency %s : %s", config.UpdateFrequencyYAML, err)
+		return nil, fmt.Errorf("invalid update frequency %s : %s", config.CrowdsecUpdateFrequencyYAML, err)
+	}
+
+	_, err = time.ParseDuration(config.CloudflareUpdateFrequencyYAML)
+	if err != nil {
+		return nil, fmt.Errorf("invalid update frequency %s : %s", config.CloudflareUpdateFrequencyYAML, err)
 	}
 
 	if config.Action == "" {

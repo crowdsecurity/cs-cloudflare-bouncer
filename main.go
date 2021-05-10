@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/coreos/go-systemd/daemon"
@@ -133,26 +134,66 @@ func main() {
 	csLapi := &csbouncer.StreamBouncer{
 		APIKey:         conf.CrowdSecLAPIKey,
 		APIUrl:         conf.CrowdSecLAPIUrl,
-		TickerInterval: conf.UpdateFrequencyYAML,
+		TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
 	}
 
 	if err := csLapi.Init(); err != nil {
 		log.Fatalf(err.Error())
 	}
 
+	cloudflareTicker := time.NewTicker(conf.CloudflareUpdateFrequency)
+
 	go csLapi.Run()
+
 	cloudflareIDByIP := make(map[string]string)
+	// These maps are used to create slices without dup IPS
+	deleteIPMap := make(map[cloudflare.IPListItemDeleteItemRequest]bool)
+	addIPMap := make(map[cloudflare.IPListItemCreateRequest]bool)
 
 	t.Go(func() error {
-		log.Printf("processing new and deleted decisions . . .")
 		for {
 			select {
 			case <-t.Dying():
 				return errors.New("tomb dying")
 
+			case <-cloudflareTicker.C:
+				addIPs := make([]cloudflare.IPListItemCreateRequest, 0)
+				deleteIPs := make([]cloudflare.IPListItemDeleteItemRequest, 0)
+				for k := range addIPMap {
+					addIPs = append(addIPs, k)
+				}
+
+				if len(addIPs) > 0 {
+					ipItems, err := cfAPI.CreateIPListItems(ctx, ipListID, addIPs)
+					log.Infof("making API call to cloudflare for adding '%d' decisions", len(addIPs))
+
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					for _, ipItem := range ipItems {
+						cloudflareIDByIP[ipItem.IP] = ipItem.ID
+					}
+				}
+
+				for k := range deleteIPMap {
+					deleteIPs = append(deleteIPs, k)
+				}
+
+				if len(deleteIPs) > 0 {
+					_, err := cfAPI.DeleteIPListItems(ctx, ipListID, cloudflare.IPListItemDeleteRequest{Items: deleteIPs})
+					log.Infof("making API call to cloudflare to delete '%d' decisions", len(deleteIPs))
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+
+				// Flush
+				deleteIPMap = make(map[cloudflare.IPListItemDeleteItemRequest]bool)
+				addIPMap = make(map[cloudflare.IPListItemCreateRequest]bool)
+
 			case streamDecision := <-csLapi.Stream:
-				deleteIPMap := make(map[cloudflare.IPListItemDeleteItemRequest]bool)
-				addIPMap := make(map[cloudflare.IPListItemCreateRequest]bool)
+				log.Printf("processing new and deleted decisions from crowdsec LAPI")
 				for _, decision := range streamDecision.Deleted {
 					if _, ok := cloudflareIDByIP[*decision.Value]; ok {
 						deleteIPMap[cloudflare.IPListItemDeleteItemRequest{ID: cloudflareIDByIP[*decision.Value]}] = true
@@ -167,36 +208,6 @@ func main() {
 					}] = true
 				}
 
-				addIPs := make([]cloudflare.IPListItemCreateRequest, 0)
-				for k := range addIPMap {
-					addIPs = append(addIPs, k)
-				}
-
-				if len(addIPs) > 0 {
-					ipItems, err := cfAPI.CreateIPListItems(ctx, ipListID, addIPs)
-					log.Infof("adding '%d' decisions", len(addIPs))
-
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					for _, ipItem := range ipItems {
-						cloudflareIDByIP[ipItem.IP] = ipItem.ID
-					}
-				}
-
-				deleteIPs := make([]cloudflare.IPListItemDeleteItemRequest, 0)
-				for k := range deleteIPMap {
-					deleteIPs = append(deleteIPs, k)
-				}
-
-				if len(deleteIPs) > 0 {
-					_, err := cfAPI.DeleteIPListItems(ctx, ipListID, cloudflare.IPListItemDeleteRequest{Items: deleteIPs})
-					log.Infof("deleting '%d' decisions", len(deleteIPs))
-					if err != nil {
-						log.Fatal(err)
-					}
-				}
 			}
 		}
 	})
