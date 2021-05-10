@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/crowdsecurity/cs-cloudflare-bouncer/raw/master/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
+<img src="https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
 </p>
 <p align="center">
 <img src="https://img.shields.io/badge/build-pass-green">
