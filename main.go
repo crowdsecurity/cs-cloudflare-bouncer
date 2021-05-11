@@ -32,7 +32,7 @@ func HandleSignals(ctx context.Context) {
 		}
 	}()
 	code := <-exitChan
-	log.Infof("Shutting down firewall-bouncer service")
+	log.Infof("Shutting down cloudfare-bouncer service")
 	os.Exit(code)
 }
 

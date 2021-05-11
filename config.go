@@ -49,16 +49,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("invalid action %s in config, valid actions are either 'challenge', 'block', 'js_challenge'", config.Action)
 	}
 
-	// config.CloudflareUpdateFrequency, err = time.ParseDuration(config.CrowdsecUpdateFrequencyYAML)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("invalid update frequency %s : %s", config.CrowdsecUpdateFrequencyYAML, err)
-	// }
-
-	// _, err = time.ParseDuration(config.CloudflareUpdateFrequencyYAML)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("invalid update frequency %s : %s", config.CloudflareUpdateFrequencyYAML, err)
-	// }
-
 	if config.CloudflareIPListName == "" {
 		config.CloudflareIPListName = "crowdsec"
 	}

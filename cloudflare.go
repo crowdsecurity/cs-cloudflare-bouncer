@@ -14,9 +14,8 @@ func deleteExistingCrowdSecIPList(ctx context.Context, cfAPI cloudflareAPI, conf
 		return err
 	}
 
-	id := getIPListID(ipLists)
+	id := getIPListID(ipLists, conf.CloudflareIPListName)
 	if id == nil {
-		log.Info("ip list already exists")
 		return nil
 	}
 
@@ -54,12 +53,13 @@ func removeIPListDependencies(ctx context.Context, cfAPI cloudflareAPI, conf *bo
 	return nil
 }
 
-func getIPListID(ipLists []cloudflare.IPList) *string {
+func getIPListID(ipLists []cloudflare.IPList, IPListName string) *string {
 	for _, ipList := range ipLists {
-		if ipList.Name == "crowdsec" {
+		if ipList.Name == IPListName {
 			return &ipList.ID
 		}
 	}
+	log.Infof("ip list %s does not exists", IPListName)
 	return nil
 }
 
