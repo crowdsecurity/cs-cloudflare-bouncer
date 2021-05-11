@@ -81,3 +81,24 @@ func setUpIPListAndFirewall(ctx context.Context, cfAPI cloudflareAPI, conf *boun
 	}
 	return ipList.ID, nil
 }
+
+func mapToSliceCreateRequest(mp map[cloudflare.IPListItemCreateRequest]bool) []cloudflare.IPListItemCreateRequest {
+	slice := make([]cloudflare.IPListItemCreateRequest, len(mp))
+	i := 0
+	for k := range mp {
+		slice[i] = k
+		i++
+	}
+
+	return slice
+}
+
+func mapToSliceDeleteRequest(mp map[cloudflare.IPListItemDeleteItemRequest]bool) []cloudflare.IPListItemDeleteItemRequest {
+	slice := make([]cloudflare.IPListItemDeleteItemRequest, len(mp))
+	i := 0
+	for k := range mp {
+		slice[i] = k
+		i++
+	}
+	return slice
+}

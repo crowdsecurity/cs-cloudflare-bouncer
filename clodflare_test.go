@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 
@@ -68,39 +67,61 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
-
 	return make([]cloudflare.IPListItem, 0), nil
 }
 
-func TestMain(t *testing.T) {
-	var mockCfAPI cloudflareAPI = &mockCloudflareAPI{ 
-		IPLists:[]cloudflare.IPList{{ID: "11", Name: "crowdsec"}},
+func TestIPFirewallSetUp(t *testing.T) {
+	var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
+		IPLists: []cloudflare.IPList{{ID: "11", Name: "crowdsec"}},
 		FirewallRulesList: []cloudflare.FirewallRule{
-			 {Filter: cloudflare.Filter{Expression: "ip in $crowdsec"} },
+			{Filter: cloudflare.Filter{Expression: "ip in $crowdsec"}},
 			{Filter: cloudflare.Filter{Expression: "ip in $dummy"}}}}
 
 	ctx := context.Background()
 	conf, err := NewConfig("./test_data/valid_config.yaml")
+
 	if err != nil {
-		fmt.Errorf("failure in  loading config %s", err.Error())
-	}
-	setUpIPListAndFirewall(ctx, mockCfAPI, conf)
-	l, err := mockCfAPI.ListIPLists(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(l)
-	if len(l) != 1 {
-		t.Errorf("expected only 1 IP list found %d", len(l))
+		t.Errorf("failure in  loading config %s", err.Error())
 	}
 
-	ll, err := mockCfAPI.FirewallRules(ctx, "", cloudflare.PaginationOptions{})
+	setUpIPListAndFirewall(ctx, mockCfAPI, conf)
+	ipLists, err := mockCfAPI.ListIPLists(ctx)
+
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(ll)
-	if len(ll) 	!= 2 {
-		t.Errorf("expected only 1 IP list found %d", len(ll))
+	if len(ipLists) != 1 {
+		t.Errorf("expected only 1 IP list found %d", len(ipLists))
+	}
+
+	fr, err := mockCfAPI.FirewallRules(ctx, "", cloudflare.PaginationOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(fr) != 2 {
+		t.Errorf("expected only 1 IP list found %d", len(fr))
+	}
+}
+
+func TestHelpers(t *testing.T) {
+	addIPMap := map[cloudflare.IPListItemCreateRequest]bool{
+		cloudflare.IPListItemCreateRequest{IP: "1.2.3.4"}: true,
+		cloudflare.IPListItemCreateRequest{IP: "1.2.3.4"}: true,
+		cloudflare.IPListItemCreateRequest{IP: "1.2.3.5"}: true,
+	}
+	addIPSlice := mapToSliceCreateRequest(addIPMap)
+	if len(addIPSlice) != 2 {
+		t.Errorf("expected 2 items in slice instead got %d", len(addIPSlice))
+	}
+
+	deleteIPMap := map[cloudflare.IPListItemDeleteItemRequest]bool{
+		cloudflare.IPListItemDeleteItemRequest{ID: "1"}: true,
+		cloudflare.IPListItemDeleteItemRequest{ID: "2"}: true,
+		cloudflare.IPListItemDeleteItemRequest{ID: "1"}: true,
+	}
+	deleteIPSlice := mapToSliceDeleteRequest(deleteIPMap)
+	if len(deleteIPSlice) != 2 {
+		t.Errorf("expected 2 items in slice instead got %d", len(deleteIPSlice))
 	}
 
 }

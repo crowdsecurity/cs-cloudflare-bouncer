@@ -99,13 +99,11 @@ func main() {
 			select {
 			case <-t.Dying():
 				return errors.New("tomb dying")
+			
 
 			case <-cloudflareTicker.C:
-				addIPs := make([]cloudflare.IPListItemCreateRequest, 0)
-				deleteIPs := make([]cloudflare.IPListItemDeleteItemRequest, 0)
-				for k := range addIPMap {
-					addIPs = append(addIPs, k)
-				}
+				addIPs := mapToSliceCreateRequest(addIPMap)
+				deleteIPs := mapToSliceDeleteRequest(deleteIPMap)
 				if len(addIPs) > 0 {
 					ipItems, err := cfAPI.CreateIPListItems(ctx, ipListID, addIPs)
 					log.Infof("making API call to cloudflare for adding '%d' decisions", len(addIPs))
@@ -119,9 +117,6 @@ func main() {
 					}
 				}
 
-				for k := range deleteIPMap {
-					deleteIPs = append(deleteIPs, k)
-				}
 
 				if len(deleteIPs) > 0 {
 					_, err := cfAPI.DeleteIPListItems(ctx, ipListID, cloudflare.IPListItemDeleteRequest{Items: deleteIPs})
