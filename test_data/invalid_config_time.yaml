@@ -1,0 +1,19 @@
+# CrowdSec Config
+crowdsec_lapi_url: http://localhost:8080/
+crowdsec_lapi_key: dummy
+crowdsec_update_frequency: 10s
+
+# Cloudfare Config
+cloudfare_api_token: dummy
+cloudfare_account_id: dummy
+cloudfare_zone_id: dummy
+# This is invalid
+cloudflare_update_frequency: dummy
+cloudfare_ip_list_name: crowdsec
+
+# Bouncer Config
+action: block
+daemon: true
+log_mode: file
+log_dir: /var/log/
+log_level: info
