@@ -12,27 +12,25 @@ import (
 )
 
 type bouncerConfig struct {
-	CrowdSecLAPIUrl               string `yaml:"crowdsec_lapi_url"`
-	CrowdSecLAPIKey               string `yaml:"crowdsec_lapi_key"`
-	CrowdsecUpdateFrequencyYAML   string `yaml:"crowdsec_update_frequency"`
-	CloudflareAPIToken            string `yaml:"cloudfare_api_token"`
-	CloudflareAccountID           string `yaml:"cloudfare_account_id"`
-	CloudflareZoneID              string `yaml:"cloudfare_zone_id"`
-	CloudflareIPListName          string `yaml:"cloudfare_ip_list_name"`
-	CloudflareUpdateFrequencyYAML string `yaml:"cloudflare_update_frequency"`
-	CloudflareUpdateFrequency     time.Duration `yaml:"-"`
-	Action                        string    `yaml:"action"`
-	Daemon                        bool      `yaml:"daemon"`
-	LogMode                       string    `yaml:"log_mode"`
-	LogDir                        string    `yaml:"log_dir"`
-	LogLevel                      log.Level `yaml:"log_level"`
+	CrowdSecLAPIUrl             string        `yaml:"crowdsec_lapi_url"`
+	CrowdSecLAPIKey             string        `yaml:"crowdsec_lapi_key"`
+	CrowdsecUpdateFrequencyYAML string        `yaml:"crowdsec_update_frequency"`
+	CloudflareAPIToken          string        `yaml:"cloudfare_api_token"`
+	CloudflareAccountID         string        `yaml:"cloudfare_account_id"`
+	CloudflareZoneID            string        `yaml:"cloudfare_zone_id"`
+	CloudflareIPListName        string        `yaml:"cloudfare_ip_list_name"`
+	CloudflareUpdateFrequency   time.Duration `yaml:"cloudflare_update_frequency"`
+	Action                      string        `yaml:"action"`
+	Daemon                      bool          `yaml:"daemon"`
+	LogMode                     string        `yaml:"log_mode"`
+	LogDir                      string        `yaml:"log_dir"`
+	LogLevel                    log.Level     `yaml:"log_level"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
 func NewConfig(configPath string) (*bouncerConfig, error) {
 	var LogOutput *lumberjack.Logger //io.Writer
 	config := &bouncerConfig{}
-
 	configBuff, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s : %v", configPath, err)
@@ -43,19 +41,23 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
 
-	config.CloudflareUpdateFrequency, err = time.ParseDuration(config.CrowdsecUpdateFrequencyYAML)
-	if err != nil {
-		return nil, fmt.Errorf("invalid update frequency %s : %s", config.CrowdsecUpdateFrequencyYAML, err)
-	}
-
-	_, err = time.ParseDuration(config.CloudflareUpdateFrequencyYAML)
-	if err != nil {
-		return nil, fmt.Errorf("invalid update frequency %s : %s", config.CloudflareUpdateFrequencyYAML, err)
-	}
-
 	if config.Action == "" {
 		config.Action = "block"
 	}
+
+	if config.Action != "block" && config.Action != "challenge" && config.Action != "js_challenge" {
+		return nil, fmt.Errorf("invalid action %s in config, valid actions are either 'challenge', 'block', 'js_challenge'", config.Action)
+	}
+
+	// config.CloudflareUpdateFrequency, err = time.ParseDuration(config.CrowdsecUpdateFrequencyYAML)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("invalid update frequency %s : %s", config.CrowdsecUpdateFrequencyYAML, err)
+	// }
+
+	// _, err = time.ParseDuration(config.CloudflareUpdateFrequencyYAML)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("invalid update frequency %s : %s", config.CloudflareUpdateFrequencyYAML, err)
+	// }
 
 	if config.CloudflareIPListName == "" {
 		config.CloudflareIPListName = "crowdsec"

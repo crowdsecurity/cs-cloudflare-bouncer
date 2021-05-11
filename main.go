@@ -38,20 +38,21 @@ func HandleSignals(ctx context.Context) {
 	os.Exit(code)
 }
 
-func clearExistingCrowdSecIPList(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) error {
+func deleteExistingCrowdSecIPList(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) error {
 	ipLists, err := cfAPI.ListIPLists(ctx)
 	if err != nil {
 		return err
 	}
 
-	id, err := getIPListID(ipLists)
-	if err != nil {
-		return err
+	id := getIPListID(ipLists)
+	if id == nil {
+		log.Info("ip list already exists")
+		return nil
 	}
 
 	removeIPListDependencies(ctx, cfAPI, conf)
 
-	_, err = cfAPI.DeleteIPList(ctx, id)
+	_, err = cfAPI.DeleteIPList(ctx, *id)
 	if err != nil {
 		return err
 	}
@@ -80,17 +81,21 @@ func removeIPListDependencies(ctx context.Context, cfAPI *cloudflare.API, conf *
 	return nil
 }
 
-func getIPListID(ipLists []cloudflare.IPList) (string, error) {
+func getIPListID(ipLists []cloudflare.IPList) *string {
 	for _, ipList := range ipLists {
 		if ipList.Name == "crowdsec" {
-			return ipList.ID, nil
+			return &ipList.ID
 		}
 	}
-	return "", errors.New("crowdsec ip list not found")
+	return nil
 }
 
 func setUpIPListAndFirewall(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) (string, error) {
-	clearExistingCrowdSecIPList(ctx, cfAPI, conf)
+	err := deleteExistingCrowdSecIPList(ctx, cfAPI, conf)
+	if err != nil {
+		return "", err
+	}
+
 	ipList, err := cfAPI.CreateIPList(ctx, "crowdsec", "IP list managed by crowdsec bouncer", "ip")
 	if err != nil {
 		return "", err

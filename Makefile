@@ -8,7 +8,7 @@ GOGET=$(GOCMD) get
 
 
 #Current versioning information from env
-# BUILD_VERSION?="$(shell git describe --tags `git rev-list --tags --max-count=1`)"
+BUILD_VERSION?="$(shell git describe --tags `git rev-list --tags --max-count=1`)"
 BUILD_GOVERSION="$(shell go version | cut -d " " -f3 | sed -r 's/[go]+//g')"
 BUILD_TIMESTAMP=$(shell date +%F"_"%T)
 BUILD_TAG="$(shell git rev-parse HEAD)"
