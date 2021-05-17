@@ -6,7 +6,6 @@ import (
 	"flag"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -27,81 +26,14 @@ func HandleSignals(ctx context.Context) {
 		for {
 			s := <-signalChan
 			switch s {
-			// kill -SIGTERM XXXX
 			case syscall.SIGTERM:
 				exitChan <- 0
 			}
 		}
 	}()
 	code := <-exitChan
-	log.Infof("Shutting down firewall-bouncer service")
+	log.Infof("Shutting down cloudfare-bouncer service")
 	os.Exit(code)
-}
-
-func clearExistingCrowdSecIPList(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) error {
-	ipLists, err := cfAPI.ListIPLists(ctx)
-	if err != nil {
-		return err
-	}
-
-	id, err := getIPListID(ipLists)
-	if err != nil {
-		return err
-	}
-
-	removeIPListDependencies(ctx, cfAPI, conf)
-
-	_, err = cfAPI.DeleteIPList(ctx, id)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func removeIPListDependencies(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) error {
-	rules, err := cfAPI.FirewallRules(ctx, conf.CloudflareZoneID, cloudflare.PaginationOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, rule := range rules {
-		if strings.Contains(rule.Filter.Expression, "$"+conf.CloudflareIPListName) {
-			err := cfAPI.DeleteFirewallRule(ctx, conf.CloudflareZoneID, rule.ID)
-			if err != nil {
-				return err
-			}
-
-			err = cfAPI.DeleteFilter(ctx, conf.CloudflareZoneID, rule.Filter.ID)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func getIPListID(ipLists []cloudflare.IPList) (string, error) {
-	for _, ipList := range ipLists {
-		if ipList.Name == "crowdsec" {
-			return ipList.ID, nil
-		}
-	}
-	return "", errors.New("crowdsec ip list not found")
-}
-
-func setUpIPListAndFirewall(ctx context.Context, cfAPI *cloudflare.API, conf *bouncerConfig) (string, error) {
-	clearExistingCrowdSecIPList(ctx, cfAPI, conf)
-	ipList, err := cfAPI.CreateIPList(ctx, "crowdsec", "IP list managed by crowdsec bouncer", "ip")
-	if err != nil {
-		return "", err
-	}
-
-	firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: "ip.src in $crowdsec"}, Action: conf.Action}}
-	_, err = cfAPI.CreateFirewallRules(ctx, conf.CloudflareZoneID, firewallRules)
-	if err != nil {
-		return "", err
-	}
-	return ipList.ID, nil
 }
 
 func main() {
@@ -119,8 +51,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfAPI, err := cloudflare.NewWithAPIToken(
-		conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
+	var cfAPI cloudflareAPI
+	cfAPI, err = cloudflare.NewWithAPIToken(conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
 
 	if err != nil {
 		log.Fatal(err)
@@ -155,14 +87,11 @@ func main() {
 			select {
 			case <-t.Dying():
 				return errors.New("tomb dying")
+			
 
 			case <-cloudflareTicker.C:
-				addIPs := make([]cloudflare.IPListItemCreateRequest, 0)
-				deleteIPs := make([]cloudflare.IPListItemDeleteItemRequest, 0)
-				for k := range addIPMap {
-					addIPs = append(addIPs, k)
-				}
-
+				addIPs := mapToSliceCreateRequest(addIPMap)
+				deleteIPs := mapToSliceDeleteRequest(deleteIPMap)
 				if len(addIPs) > 0 {
 					ipItems, err := cfAPI.CreateIPListItems(ctx, ipListID, addIPs)
 					log.Infof("making API call to cloudflare for adding '%d' decisions", len(addIPs))
@@ -176,9 +105,6 @@ func main() {
 					}
 				}
 
-				for k := range deleteIPMap {
-					deleteIPs = append(deleteIPs, k)
-				}
 
 				if len(deleteIPs) > 0 {
 					_, err := cfAPI.DeleteIPListItems(ctx, ipListID, cloudflare.IPListItemDeleteRequest{Items: deleteIPs})
@@ -194,20 +120,7 @@ func main() {
 
 			case streamDecision := <-csLapi.Stream:
 				log.Printf("processing new and deleted decisions from crowdsec LAPI")
-				for _, decision := range streamDecision.Deleted {
-					if _, ok := cloudflareIDByIP[*decision.Value]; ok {
-						deleteIPMap[cloudflare.IPListItemDeleteItemRequest{ID: cloudflareIDByIP[*decision.Value]}] = true
-						delete(cloudflareIDByIP, *decision.Value)
-					}
-				}
-
-				for _, decision := range streamDecision.New {
-					addIPMap[cloudflare.IPListItemCreateRequest{
-						IP:      *decision.Value,
-						Comment: "Added by crowdsec bouncer",
-					}] = true
-				}
-
+				CollectLAPIStream(streamDecision, deleteIPMap, addIPMap, cloudflareIDByIP)
 			}
 		}
 	})
