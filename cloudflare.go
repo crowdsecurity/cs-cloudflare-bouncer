@@ -8,6 +8,18 @@ import (
 	"github.com/prometheus/common/log"
 )
 
+type cloudflareAPI interface {
+	CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error)
+	DeleteIPList(ctx context.Context, id string) (cloudflare.IPListDeleteResponse, error)
+	ListIPLists(ctx context.Context) ([]cloudflare.IPList, error)
+	CreateFirewallRules(ctx context.Context, zone string, rules []cloudflare.FirewallRule) ([]cloudflare.FirewallRule, error)
+	DeleteFirewallRule(ctx context.Context, zone string, id string) error
+	DeleteFilter(ctx context.Context, zone string, id string) error
+	FirewallRules(ctx context.Context, zone string, opts cloudflare.PaginationOptions) ([]cloudflare.FirewallRule, error)
+	CreateIPListItems(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) ([]cloudflare.IPListItem, error)
+	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error)
+}
+
 func deleteExistingCrowdSecIPList(ctx context.Context, cfAPI cloudflareAPI, conf *bouncerConfig) error {
 	ipLists, err := cfAPI.ListIPLists(ctx)
 	if err != nil {
