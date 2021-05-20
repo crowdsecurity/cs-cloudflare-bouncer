@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudfare-bouncer"
-BIN_PATH="./cs-cloudfare-bouncer"
-CONFIG_DIR="/etc/crowdsec/cs-cloudfare-bouncer/"
+BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudflare-bouncer"
+BIN_PATH="./cs-cloudflare-bouncer"
+CONFIG_DIR="/etc/crowdsec/cs-cloudflare-bouncer/"
 PID_DIR="/var/run/crowdsec/"
-SYSTEMD_PATH_FILE="/etc/systemd/system/cs-cloudfare-bouncer.service"
+SYSTEMD_PATH_FILE="/etc/systemd/system/cs-cloudflare-bouncer.service"
 
 LAPI_KEY=""
 CF_TOKEN=""
@@ -15,7 +15,7 @@ gen_apikey() {
     if [[ $? == 0 ]]; then 
         echo "cscli found, generating bouncer api key."
         SUFFIX=`tr -dc A-Za-z0-9 </dev/urandom | head -c 8`
-        LAPI_KEY=`cscli bouncers add cs-cloudfare-bouncer-${SUFFIX} -o raw`
+        LAPI_KEY=`cscli bouncers add cs-cloudflare-bouncer-${SUFFIX} -o raw`
         READY="yes"
     else 
         echo "cscli not found, you will need to generate api key."
@@ -26,26 +26,26 @@ gen_apikey() {
  
  
 gen_config_file() {
-    LAPI_KEY=${LAPI_KEY} CF_TOKEN=${CF_TOKEN} CF_ACC_ID=${CF_ACC_ID} CF_ZONE_ID=${CF_ZONE_ID} envsubst < ./config/cs-cloudfare-bouncer.yaml > "${CONFIG_DIR}cs-cloudfare-bouncer.yaml"
+    LAPI_KEY=${LAPI_KEY} CF_TOKEN=${CF_TOKEN} CF_ACC_ID=${CF_ACC_ID} CF_ZONE_ID=${CF_ZONE_ID} envsubst < ./config/cs-cloudflare-bouncer.yaml > "${CONFIG_DIR}cs-cloudflare-bouncer.yaml"
 }
 
 # gen_config_file() {
-#     LAPI_KEY=${LAPI_KEY} envsubst < ./config/cs-cloudfare-bouncer.yaml > "${CONFIG_DIR}cs-cloudfare-bouncer.yaml"
+#     LAPI_KEY=${LAPI_KEY} envsubst < ./config/cs-cloudflare-bouncer.yaml > "${CONFIG_DIR}cs-cloudflare-bouncer.yaml"
 # }
 
 
-install_cloudfare_bouncer() {
+install_cloudflare_bouncer() {
 	install -v -m 755 -D "${BIN_PATH}" "${BIN_PATH_INSTALLED}"
 	mkdir -p "${CONFIG_DIR}"
-	cp "./config/cs-cloudfare-bouncer.yaml" "${CONFIG_DIR}cs-cloudfare-bouncer.yaml"
-	CFG=${CONFIG_DIR} PID=${PID_DIR} BIN=${BIN_PATH_INSTALLED} envsubst < ./config/cs-cloudfare-bouncer.service > "${SYSTEMD_PATH_FILE}"
+	cp "./config/cs-cloudflare-bouncer.yaml" "${CONFIG_DIR}cs-cloudflare-bouncer.yaml"
+	CFG=${CONFIG_DIR} PID=${PID_DIR} BIN=${BIN_PATH_INSTALLED} envsubst < ./config/cs-cloudflare-bouncer.service > "${SYSTEMD_PATH_FILE}"
 	systemctl daemon-reload
 }
 
-read_cloudfare_creds(){
-    read -p "Enter Cloudfare API Token "  CF_TOKEN
-    read -p "Enter Cloudfare Account ID "  CF_ACC_ID
-    read -p "Enter Cloudfare Zone ID "  CF_ZONE_ID
+read_cloudflare_creds(){
+    read -p "Enter cloudflare API Token "  CF_TOKEN
+    read -p "Enter cloudflare Account ID "  CF_ACC_ID
+    read -p "Enter cloudflare Zone ID "  CF_ZONE_ID
 }
 
 while getopts t:a:z: flag
@@ -62,19 +62,19 @@ if ! [ $(id -u) = 0 ]; then
     exit 1
 fi
 
-echo "Installing cs-cloudfare-bouncer"
-install_cloudfare_bouncer
+echo "Installing cs-cloudflare-bouncer"
+install_cloudflare_bouncer
 gen_apikey
 
-if [ "$CF_TOKEN" = "" ] || [ "$CF_TOKEN" = "" ] || [ "$CF_TOKEN" = "" ]; then
-    read_cloudfare_creds
+if [ "$CF_TOKEN" = "" ] || [ "$CF_ZONE_ID" = "" ] || [ "$CF_ACC_ID" = "" ]; then
+    read_cloudflare_creds
 fi
 
 gen_config_file
-systemctl enable cs-cloudfare-bouncer.service
+systemctl enable cs-cloudflare-bouncer.service
 if [ "$READY" = "yes" ]; then
-    systemctl start cs-cloudfare-bouncer.service
+    systemctl start cs-cloudflare-bouncer.service
 else
-    echo "service not started. You need to get an API key and configure it in ${CONFIG_DIR}cs-cloudfare-bouncer.yaml"
+    echo "service not started. You need to get an API key and configure it in ${CONFIG_DIR}cs-cloudflare-bouncer.yaml"
 fi
-echo "The cs-cloudfare-bouncer service has been installed!"
+echo "The cs-cloudflare-bouncer service has been installed!"

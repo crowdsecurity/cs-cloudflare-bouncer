@@ -1,27 +1,77 @@
 package main
 
 import (
+	"reflect"
 	"testing"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func TestNewConfig(t *testing.T) {
-
-	cfgPath := "./test_data/valid_config.yaml"
-	_, err := NewConfig(cfgPath)
-	if err != nil {
-		t.Errorf("config at %s is valid and supposed to be parsed, instead ended up with %s", cfgPath, err.Error())
+	type args struct {
+		configPath string
 	}
-
-	cfgPath = "./test_data/invalid_config_time.yaml"
-	_, err = NewConfig(cfgPath)
-	if err == nil {
-		t.Errorf("config at %s has invalid time, and parsing it should cause an error", cfgPath)
+	tests := []struct {
+		name    string
+		args    args
+		want    *bouncerConfig
+		wantErr bool
+	}{
+		{
+			name: "valid",
+			args: args{"./test_data/valid_config.yaml"},
+			want: &bouncerConfig{
+				CrowdSecLAPIUrl:             "http://localhost:8080/",
+				CrowdSecLAPIKey:             "${LAPI_KEY}",
+				CrowdsecUpdateFrequencyYAML: "10s",
+				CloudflareConfig: CloudflareConfig{
+					Accounts: []CloudflareAccount{
+						{
+							ID: "${CF_ACC_ID}",
+							Zones: []CloudflareZone{
+								{
+									ID:          "${CF_ZONE_ID}",
+									Remediation: "block",
+								},
+							},
+							Token:      "${CF_TOKEN}",
+							IPListName: "crowdsec",
+						},
+					},
+					UpdateFrequency: time.Second * 30,
+				},
+				CloudflareIPListName: "crowdsec",
+				Daemon:               false,
+				LogMode:              "stdout",
+				LogDir:               "/var/log/",
+				LogLevel:             log.InfoLevel,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "invalid time",
+			args:    args{"/test_data/invalid_config_time.yaml"},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "invalid time",
+			args:    args{"/test_data/invalid_config_remedy.yaml"},
+			want:    nil,
+			wantErr: true,
+		},
 	}
-
-	cfgPath = "./test_data/invalid_config_action.yaml"
-	_, err = NewConfig(cfgPath)
-	if err == nil {
-		t.Errorf("config at %s has invalid action, and parsing it should cause an error", cfgPath)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewConfig(tt.args.configPath)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewConfig() = %v, want %v", got, tt.want)
+			}
+		})
 	}
-
 }

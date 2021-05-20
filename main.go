@@ -7,10 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/cloudflare/cloudflare-go"
 	"github.com/coreos/go-systemd/daemon"
+	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/tomb.v2"
@@ -32,11 +31,15 @@ func HandleSignals(ctx context.Context) {
 		}
 	}()
 	code := <-exitChan
-	log.Infof("Shutting down cloudfare-bouncer service")
+	log.Infof("Shutting down cloudflare-bouncer service")
 	os.Exit(code)
 }
 
 func main() {
+
+	// Create go routine per cloudflare account
+	// By using channels, after every nth second feed the decisions to each cf routine.
+	// Each cf routine maintains it's own IP list and cache.
 
 	configPath := flag.String("c", "", "path to config file")
 	flag.Parse()
@@ -45,20 +48,9 @@ func main() {
 		log.Fatalf("config file required")
 	}
 
+	// configPath := "./cfg.yaml"
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var cfAPI cloudflareAPI
-	cfAPI, err = cloudflare.NewWithAPIToken(conf.CloudflareAPIToken, cloudflare.UsingAccount(conf.CloudflareAccountID))
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ipListID, err := setUpIPListAndFirewall(ctx, cfAPI, conf)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,61 +65,39 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 
-	cloudflareTicker := time.NewTicker(conf.CloudflareUpdateFrequency)
-
 	go csLapi.Run()
 
-	cloudflareIDByIP := make(map[string]string)
-	// These maps are used to create slices without dup IPS
-	deleteIPMap := make(map[cloudflare.IPListItemDeleteItemRequest]bool)
-	addIPMap := make(map[cloudflare.IPListItemCreateRequest]bool)
-
 	t.Go(func() error {
+		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
+		workerDeaths := make(chan struct{})
+
+		for _, account := range conf.CloudflareConfig.Accounts {
+			lapiStream := make(chan *models.DecisionsStreamResponse)
+			lapiStreams = append(lapiStreams, lapiStream)
+			account := account
+			worker := CloudflareWorker{Account: account, Ctx: ctx, LAPIStream: lapiStream, DeathChannel: workerDeaths, IPListName: account.IPListName, UpdateFrequency: conf.CloudflareConfig.UpdateFrequency}
+			go worker.Run()
+		}
 		for {
 			select {
-			case <-t.Dying():
-				return errors.New("tomb dying")
-			
-
-			case <-cloudflareTicker.C:
-				addIPs := mapToSliceCreateRequest(addIPMap)
-				deleteIPs := mapToSliceDeleteRequest(deleteIPMap)
-				if len(addIPs) > 0 {
-					ipItems, err := cfAPI.CreateIPListItems(ctx, ipListID, addIPs)
-					log.Infof("making API call to cloudflare for adding '%d' decisions", len(addIPs))
-
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					for _, ipItem := range ipItems {
-						cloudflareIDByIP[ipItem.IP] = ipItem.ID
-					}
+			case decisions := <-csLapi.Stream:
+				// broadcast decision to each worker
+				for _, lapiStream := range lapiStreams {
+					lapiStream := lapiStream
+					go func() {
+						lapiStream <- decisions
+					}()
 				}
 
-
-				if len(deleteIPs) > 0 {
-					_, err := cfAPI.DeleteIPListItems(ctx, ipListID, cloudflare.IPListItemDeleteRequest{Items: deleteIPs})
-					log.Infof("making API call to cloudflare to delete '%d' decisions", len(deleteIPs))
-					if err != nil {
-						log.Fatal(err)
-					}
-				}
-
-				// Flush
-				deleteIPMap = make(map[cloudflare.IPListItemDeleteItemRequest]bool)
-				addIPMap = make(map[cloudflare.IPListItemCreateRequest]bool)
-
-			case streamDecision := <-csLapi.Stream:
-				log.Printf("processing new and deleted decisions from crowdsec LAPI")
-				CollectLAPIStream(streamDecision, deleteIPMap, addIPMap, cloudflareIDByIP)
+			case <-workerDeaths:
+				return errors.New("halting due to worker death")
 			}
 		}
 	})
 	if conf.Daemon {
 		sent, err := daemon.SdNotify(false, "READY=1")
 		if !sent && err != nil {
-			log.Fatalf("Failed to notify: %v", err)
+			log.Fatalf("failed to notify: %v", err)
 		}
 		HandleSignals(ctx)
 	}

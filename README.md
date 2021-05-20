@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
+<img src="https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/crowdsec_cloudflare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
 </p>
 <p align="center">
 <img src="https://img.shields.io/badge/build-pass-green">
@@ -24,7 +24,7 @@ Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bou
 tar xzvf cs-cloudflare-bouncer.tgz
 cd cs-cloudflare-bouncer/
 sudo ./install.sh -t <CLOUDFLARE_API_TOKEN> -a <CLOUDFLARE_ACCOUNT_ID> -z <CLOUDFLARE_ZONE_ID>
-systemctl status cs-cloudfare-bouncer
+systemctl status cs-cloudflare-bouncer
 ```
 
 
@@ -41,7 +41,7 @@ systemctl status cs-cloudflare-bouncer
 
 # Configuration
 
-Configuration file can be found at `/etc/crowdsec/cs-cloudfare-bouncer/cs-cloudfare-bouncer.yaml`
+Configuration file can be found at `/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml`
 
 ```yaml
 # CrowdSec Config
@@ -49,12 +49,12 @@ crowdsec_lapi_url: http://localhost:8080/
 crowdsec_lapi_key: ${LAPI_KEY}
 crowdsec_update_frequency: 10s
 
-# Cloudfare Config
-cloudfare_api_token: ${CF_TOKEN}
-cloudfare_account_id: ${CF_ACC_ID}
-cloudfare_zone_id: ${CF_ZONE_ID}
+# cloudflare Config
+cloudflare_api_token: ${CF_TOKEN}
+cloudflare_account_id: ${CF_ACC_ID}
+cloudflare_zone_id: ${CF_ZONE_ID}
 cloudflare_update_frequency: 30s
-cloudfare_ip_list_name: crowdsec
+cloudflare_ip_list_name: crowdsec
 
 # Bouncer Config
 action: block
@@ -73,4 +73,4 @@ When the `cs-cloudflare-bouncer` service starts, it first creates a CloudFlare I
 
  - Logs are in `/var/log/cs-cloudflare-bouncer.log`
  - You can view/interact directly in the ban list either with `cscli`
- - Service can be started/stopped with `systemctl start/stop cs-cloudfare-bouncer`
+ - Service can be started/stopped with `systemctl start/stop cs-cloudflare-bouncer`

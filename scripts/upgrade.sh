@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudfare-bouncer"
-BIN_PATH="./cs-cloudfare-bouncer"
+BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudflare-bouncer"
+BIN_PATH="./cs-cloudflare-bouncer"
 
 
 upgrade_bin() {
-    rm "${BIN_PATH_INSTALLED}" || (echo "cs-cloudfare-bouncer is not installed, exiting." && exit 1)
+    rm "${BIN_PATH_INSTALLED}" || (echo "cs-cloudflare-bouncer is not installed, exiting." && exit 1)
     install -v -m 755 -D "${BIN_PATH}" "${BIN_PATH_INSTALLED}"
 }
 
@@ -14,7 +14,7 @@ if ! [ $(id -u) = 0 ]; then
     exit 1
 fi
 
-systemctl stop cs-cloudfare-bouncer
+systemctl stop cs-cloudflare-bouncer
 upgrade_bin
-systemctl start cs-cloudfare-bouncer
-echo "cs-cloudfare-bouncer upgraded successfully."
+systemctl start cs-cloudflare-bouncer
+echo "cs-cloudflare-bouncer upgraded successfully."

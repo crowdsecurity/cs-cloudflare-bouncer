@@ -1,12 +1,12 @@
 #!/bin/bash
 
-BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudfare-bouncer"
-CONFIG_DIR="/etc/crowdsec/cs-cloudfare-bouncer/"
-LOG_FILE="/var/log/cs-cloudfare-bouncer.log"
-SYSTEMD_PATH_FILE="/etc/systemd/system/cs-cloudfare-bouncer.service"
+BIN_PATH_INSTALLED="/usr/local/bin/cs-cloudflare-bouncer"
+CONFIG_DIR="/etc/crowdsec/cs-cloudflare-bouncer/"
+LOG_FILE="/var/log/cs-cloudflare-bouncer.log"
+SYSTEMD_PATH_FILE="/etc/systemd/system/cs-cloudflare-bouncer.service"
 
 uninstall() {
-	systemctl stop cs-cloudfare-bouncer
+	systemctl stop cs-cloudflare-bouncer
 	rm -rf "${CONFIG_DIR}"
 	rm -f "${SYSTEMD_PATH_FILE}"
 	rm -f "${BIN_PATH_INSTALLED}"
@@ -15,4 +15,4 @@ uninstall() {
 
 uninstall
 
-echo "cs-cloudfare-bouncer uninstall successfully"
+echo "cs-cloudflare-bouncer uninstall successfully"
