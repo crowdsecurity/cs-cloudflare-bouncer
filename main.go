@@ -74,8 +74,8 @@ func main() {
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
 			lapiStreams = append(lapiStreams, lapiStream)
-			account := account
 			worker := CloudflareWorker{Account: account, Ctx: ctx, LAPIStream: lapiStream, DeathChannel: workerDeaths, IPListName: account.IPListName, UpdateFrequency: conf.CloudflareConfig.UpdateFrequency}
+			
 			go worker.Run()
 		}
 		for {

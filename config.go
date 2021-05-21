@@ -31,7 +31,6 @@ type bouncerConfig struct {
 	CrowdSecLAPIKey             string           `yaml:"crowdsec_lapi_key"`
 	CrowdsecUpdateFrequencyYAML string           `yaml:"crowdsec_update_frequency"`
 	CloudflareConfig            CloudflareConfig `yaml:"cloudflare_config"`
-	CloudflareIPListName        string           `yaml:"cloudfare_ip_list_name"`
 	Daemon                      bool             `yaml:"daemon"`
 	LogMode                     string           `yaml:"log_mode"`
 	LogDir                      string           `yaml:"log_dir"`
@@ -68,7 +67,10 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			config.CloudflareConfig.Accounts[i].IPListName = "crowdsec"
 		}
 
-		for _, zone := range account.Zones {
+		for i, zone := range account.Zones {
+			if zone.Remediation == "" {
+				account.Zones[i].Remediation = "challenge"
+			}
 			if _, ok := validRemedy[zone.Remediation]; !ok {
 				return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", zone.Remediation)
 			}
@@ -76,11 +78,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		}
 
 	}
-
-	if config.CloudflareIPListName == "" {
-		config.CloudflareIPListName = "crowdsec"
-	}
-
 	/*Configure logging*/
 	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel); err != nil {
 		log.Fatal(err.Error())

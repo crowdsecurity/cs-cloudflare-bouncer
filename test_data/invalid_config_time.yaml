@@ -3,7 +3,6 @@ crowdsec_lapi_url: http://localhost:8080/
 crowdsec_lapi_key: ${LAPI_KEY}
 crowdsec_update_frequency: -1s
 
-cloudfare_ip_list_name: crowdsec
 
 cloudflare_config:
   accounts:
