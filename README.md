@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/crowdsec_cloudflare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
+<img src="https://github.com/crowdsecurity/cs-cloudflare-bouncer/raw/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
 </p>
 <p align="center">
 <img src="https://img.shields.io/badge/build-pass-green">
@@ -77,7 +77,7 @@ For each account the `id` and `token` are required.
 For obtaining the `token`:
 1. Sign in as a user who has access to the account.
 2. Go to [Tokens](https://dash.cloudflare.com/profile/api-tokens) and create the token. The bouncer requires the follwing permissions to function.
-![image](https://user-images.githubusercontent.com/28975399/119085543-8f8cf980-ba21-11eb-84bf-9a30d4ed922e.png)
+![image](https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/token_permissions.png)
 
 For obtaining the account `id`, and `zone_id`:
 
