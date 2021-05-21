@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+type ZoneLock struct {
+	Lock   *sync.Mutex
+	ZoneID string
+}
 
 type cloudflareAPI interface {
 	Filters(ctx context.Context, zoneID string, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Filter, error)
@@ -29,7 +35,7 @@ type cloudflareAPI interface {
 type CloudflareWorker struct {
 	Logger           *log.Entry
 	Account          CloudflareAccount
-	Lock             sync.Mutex
+	ZoneLocks        []ZoneLock
 	Ctx              context.Context
 	LAPIStream       chan *models.DecisionsStreamResponse
 	DeathChannel     chan struct{}
@@ -42,6 +48,15 @@ type CloudflareWorker struct {
 	API              cloudflareAPI
 }
 
+func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, error) {
+	for _, zoneLock := range worker.ZoneLocks {
+		if zoneLock.ZoneID == zoneID {
+			return zoneLock.Lock, nil
+		}
+	}
+	return nil, fmt.Errorf("zone lock for the zone id %s not found", zoneID)
+
+}
 func (worker *CloudflareWorker) deleteExistingIPList() error {
 	ipLists, err := worker.API.ListIPLists(worker.Ctx)
 	if err != nil {
@@ -76,6 +91,20 @@ func (worker *CloudflareWorker) removeIPListDependencies() error {
 	// This clears all zone-specific firewall rules.
 	for _, zone := range zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+		zoneLock, err := worker.getMutexByZoneID(zone.ID)
+		if err == nil {
+			zoneLock.Lock()
+			zoneLogger.Debug("zone locked")
+			defer func() {
+				zoneLogger.Info("zone unlocked")
+				zoneLock.Unlock()
+			}()
+		} else {
+			// this happens if the zone is directly not specified in config
+			// but we still need to look for references of ip list among such zones
+			zoneLogger.Debug("zone locker not found")
+		}
+
 		rules, err := worker.API.FirewallRules(worker.Ctx, zone.ID, cloudflare.PaginationOptions{})
 		zoneLogger.Debugf("found %d firewall rules", len(rules))
 		if err != nil {
@@ -159,9 +188,6 @@ func mapToSliceDeleteRequest(mp map[cloudflare.IPListItemDeleteItemRequest]bool)
 }
 
 func (worker *CloudflareWorker) SetUpRules() error {
-	m := sync.Mutex{}
-	m.Lock()
-	defer m.Unlock()
 	for _, zone := range worker.Account.Zones {
 		ruleExpression := "ip.src in $" + worker.IPListName
 		firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: ruleExpression}, Action: zone.Remediation}}

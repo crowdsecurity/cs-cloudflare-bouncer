@@ -51,7 +51,8 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
 
-	accountIDSet := make(map[string]bool)
+	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
+	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validRemedy := map[string]bool{"challenge": true, "block": true, "js_challenge": true}
 
 	for i, account := range config.CloudflareConfig.Accounts {
@@ -74,6 +75,11 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			if _, ok := validRemedy[zone.Remediation]; !ok {
 				return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", zone.Remediation)
 			}
+
+			if _, ok := zoneIdSet[zone.ID]; ok {
+				return nil, fmt.Errorf("all zone id %s is duplicated", zone.ID)
+			}
+			zoneIdSet[zone.ID] = true
 
 		}
 

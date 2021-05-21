@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/coreos/go-systemd/daemon"
@@ -48,7 +49,6 @@ func main() {
 		log.Fatalf("config file required")
 	}
 
-	// configPath := "./cfg.yaml"
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
 	if err != nil {
@@ -68,14 +68,29 @@ func main() {
 	go csLapi.Run()
 
 	t.Go(func() error {
+		zoneLocks := make([]ZoneLock, 0)
+		for _, account := range conf.CloudflareConfig.Accounts {
+			for _, zone := range account.Zones {
+				zoneLocks = append(zoneLocks, ZoneLock{ZoneID: zone.ID, Lock: &sync.Mutex{}})
+			}
+		}
+
 		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 		workerDeaths := make(chan struct{})
 
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
 			lapiStreams = append(lapiStreams, lapiStream)
-			worker := CloudflareWorker{Account: account, Ctx: ctx, LAPIStream: lapiStream, DeathChannel: workerDeaths, IPListName: account.IPListName, UpdateFrequency: conf.CloudflareConfig.UpdateFrequency}
-			
+			worker := CloudflareWorker{
+				Account:         account,
+				Ctx:             ctx,
+				ZoneLocks:       zoneLocks,
+				LAPIStream:      lapiStream,
+				DeathChannel:    workerDeaths,
+				IPListName:      account.IPListName,
+				UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
+			}
+
 			go worker.Run()
 		}
 		for {
