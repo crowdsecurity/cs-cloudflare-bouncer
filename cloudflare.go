@@ -38,7 +38,6 @@ type CloudflareWorker struct {
 	ZoneLocks        []ZoneLock
 	Ctx              context.Context
 	LAPIStream       chan *models.DecisionsStreamResponse
-	DeathChannel     chan struct{}
 	IPListName       string
 	IPListID         string
 	UpdateFrequency  time.Duration
@@ -251,7 +250,6 @@ func (worker *CloudflareWorker) Init() error {
 
 func (worker *CloudflareWorker) CleanUp() {
 	worker.Logger.Error("stopping")
-	worker.DeathChannel <- struct{}{}
 }
 
 func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.DecisionsStreamResponse) {
@@ -299,6 +297,8 @@ func (worker *CloudflareWorker) Run() error {
 		case <-ticker.C:
 			worker.AddIPs()
 			worker.DeleteIPs()
+			// worker.AddCountryBan()
+			// worker.RemoveCountryBan()
 
 		case decisions := <-worker.LAPIStream:
 			worker.Logger.Info("processing new and deleted decisions from crowdsec LAPI")

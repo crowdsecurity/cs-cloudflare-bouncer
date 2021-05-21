@@ -36,6 +36,26 @@ func HandleSignals(ctx context.Context) {
 	os.Exit(code)
 }
 
+func workerDeaths(workerTombs []*tomb.Tomb) {
+	for {
+		workerDied := false
+		for _, tomb := range workerTombs {
+			if !tomb.Alive() {
+				workerDied = true
+				break
+			}
+		}
+		// if any  worker dies, kill all the rest of the workers
+		if workerDied {
+			for _, tomb := range workerTombs {
+				tomb.Kill(errors.New("peer worker died"))
+			}
+			return
+		}
+
+	}
+}
+
 func main() {
 
 	// Create go routine per cloudflare account
@@ -76,7 +96,7 @@ func main() {
 		}
 
 		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
-		workerDeaths := make(chan struct{})
+		workerTombs := make([]*tomb.Tomb, 0)
 
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
@@ -86,13 +106,23 @@ func main() {
 				Ctx:             ctx,
 				ZoneLocks:       zoneLocks,
 				LAPIStream:      lapiStream,
-				DeathChannel:    workerDeaths,
 				IPListName:      account.IPListName,
 				UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
 			}
-
-			go worker.Run()
+			var workerTomb tomb.Tomb
+			workerTomb.Go(func() error {
+				err := worker.Run()
+				return err
+			})
+			workerTombs = append(workerTombs, &workerTomb)
 		}
+
+		var workerHealth tomb.Tomb
+		workerHealth.Go(func() error {
+			workerDeaths(workerTombs)
+			return nil
+		})
+
 		for {
 			select {
 			case decisions := <-csLapi.Stream:
@@ -104,7 +134,7 @@ func main() {
 					}()
 				}
 
-			case <-workerDeaths:
+			case <-workerHealth.Dead():
 				return errors.New("halting due to worker death")
 			}
 		}
