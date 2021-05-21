@@ -12,15 +12,15 @@ BUILD_VERSION?="$(shell git describe --tags `git rev-list --tags --max-count=1`)
 BUILD_GOVERSION="$(shell go version | cut -d " " -f3 | sed -r 's/[go]+//g')"
 BUILD_TIMESTAMP=$(shell date +%F"_"%T)
 BUILD_TAG="$(shell git rev-parse HEAD)"
-export LD_OPTS=-ldflags "-s -w -X github.com/crowdsecurity/cs-cloudfare-bouncer/pkg/version.Version=$(BUILD_VERSION) \
--X github.com/crowdsecurity/cs-cloudfare-bouncer/pkg/version.BuildDate=$(BUILD_TIMESTAMP) \
--X github.com/crowdsecurity/cs-cloudfare-bouncer/pkg/version.Tag=$(BUILD_TAG) \
--X github.com/crowdsecurity/cs-cloudfare-bouncer/pkg/version.GoVersion=$(BUILD_GOVERSION)"
+export LD_OPTS=-ldflags "-s -w -X github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version.Version=$(BUILD_VERSION) \
+-X github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version.BuildDate=$(BUILD_TIMESTAMP) \
+-X github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version.Tag=$(BUILD_TAG) \
+-X github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version.GoVersion=$(BUILD_GOVERSION)"
 PREFIX?="/"
 PID_DIR = $(PREFIX)"/var/run/"
-BINARY_NAME=cs-cloudfare-bouncer
+BINARY_NAME=cs-cloudflare-bouncer
 
-RELDIR = "cs-cloudfare-bouncer-${BUILD_VERSION}"
+RELDIR = "cs-cloudflare-bouncer-${BUILD_VERSION}"
 
 all: clean build
 
@@ -40,7 +40,7 @@ build: goversion clean
 clean:
 	@rm -f $(BINARY_NAME)
 	@rm -rf ${RELDIR}
-	@rm -f cs-cloudfare-bouncer.tgz || ""
+	@rm -f cs-cloudflare-bouncer.tgz || ""
 
 
 .PHONY: release
@@ -57,5 +57,5 @@ release: build
 	@chmod +x $(RELDIR)/install.sh
 	@chmod +x $(RELDIR)/uninstall.sh
 	@chmod +x $(RELDIR)/upgrade.sh
-	@tar cvzf cs-cloudfare-bouncer.tgz $(RELDIR)
+	@tar cvzf cs-cloudflare-bouncer.tgz $(RELDIR)
 	

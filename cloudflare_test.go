@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"testing"
 
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/crowdsecurity/crowdsec/pkg/models"
 )
 
 type mockCloudflareAPI struct {
@@ -13,6 +14,14 @@ type mockCloudflareAPI struct {
 	FirewallRulesList []cloudflare.FirewallRule
 	FilterList        []cloudflare.Filter
 	IPListItems       map[string][]cloudflare.IPListItem
+}
+
+func (cfAPI *mockCloudflareAPI) Filters(ctx context.Context, zoneID string, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Filter, error) {
+	return make([]cloudflare.Filter, 0), nil
+}
+
+func (cfAPI *mockCloudflareAPI) ListZones(ctx context.Context, z ...string) ([]cloudflare.Zone, error) {
+	return make([]cloudflare.Zone, 0), nil
 }
 
 func (cfAPI *mockCloudflareAPI) CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error) {
@@ -71,6 +80,7 @@ func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string
 }
 
 func TestIPFirewallSetUp(t *testing.T) {
+
 	var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
 		IPLists: []cloudflare.IPList{{ID: "11", Name: "crowdsec"}, {ID: "12", Name: "crowd"}},
 		FirewallRulesList: []cloudflare.FirewallRule{
@@ -78,28 +88,56 @@ func TestIPFirewallSetUp(t *testing.T) {
 			{Filter: cloudflare.Filter{Expression: "ip in $dummy"}}}}
 
 	ctx := context.Background()
-	conf, err := NewConfig("./test_data/valid_config.yaml")
+	worker := CloudflareWorker{API: mockCfAPI, IPListName: "crowdsec"}
+	worker.Init()
 
-	if err != nil {
-		t.Errorf("failure in  loading config %s", err.Error())
-	}
-
-	setUpIPListAndFirewall(ctx, mockCfAPI, conf)
+	worker.setUpIPList()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
 
 	if err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 	if len(ipLists) != 2 {
+		fmt.Printf("%+v\n", worker)
 		t.Errorf("expected only 2 IP list found %d", len(ipLists))
 	}
 
 	fr, err := mockCfAPI.FirewallRules(ctx, "", cloudflare.PaginationOptions{})
 	if err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 	if len(fr) != 2 {
 		t.Errorf("expected only 1 firewall rule  found %d", len(fr))
+	}
+}
+
+func TestCollectLAPIStream(t *testing.T) {
+	ip1 := "1.2.3.4"
+	ip2 := "1.2.3.5"
+	addedDecisions := &models.Decision{Value: &ip1}
+	deletedDecisions := &models.Decision{Value: &ip2}
+	dummyResponse := &models.DecisionsStreamResponse{
+		New:     []*models.Decision{addedDecisions},
+		Deleted: []*models.Decision{deletedDecisions},
+	}
+
+	worker := CloudflareWorker{}
+	worker.Init()
+	worker.CloudflareIDByIP["1.2.3.5"] = "abcd"
+	worker.CloudflareIDByIP["1.2.3.6"] = "abcd"
+
+	worker.CollectLAPIStream(dummyResponse)
+
+	if len(worker.CloudflareIDByIP) != 1 {
+		t.Errorf("expected 1 key in 'CloudflareIDByIP' but found %d", len(worker.CloudflareIDByIP))
+	}
+
+	if len(worker.DeleteIPMap) != 1 {
+		t.Errorf("expected 1 key in 'DeleteIPMap' but found %d", len(worker.DeleteIPMap))
+	}
+
+	if len(worker.AddIPMap) != 1 {
+		t.Errorf("expected 1 key in 'AddIPMap' but found %d", len(worker.AddIPMap))
 	}
 }
 
