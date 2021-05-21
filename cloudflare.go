@@ -56,6 +56,7 @@ func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, er
 	return nil, fmt.Errorf("zone lock for the zone id %s not found", zoneID)
 
 }
+
 func (worker *CloudflareWorker) deleteExistingIPList() error {
 	ipLists, err := worker.API.ListIPLists(worker.Ctx)
 	if err != nil {

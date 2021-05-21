@@ -95,8 +95,10 @@ func main() {
 			}
 		}
 
+		// lapiStreams are used to forward the decisions to all the workers
 		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 		workerTombs := make([]*tomb.Tomb, 0)
+		var lapiStreamTombs []*tomb.Tomb
 
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
@@ -127,14 +129,23 @@ func main() {
 			select {
 			case decisions := <-csLapi.Stream:
 				// broadcast decision to each worker
+				lapiStreamTombs = make([]*tomb.Tomb, 0)
 				for _, lapiStream := range lapiStreams {
 					lapiStream := lapiStream
-					go func() {
+					var lapiStreamTomb tomb.Tomb
+					lapiStreamTomb.Go(func() error {
 						lapiStream <- decisions
-					}()
+						return nil
+					})
+					lapiStreamTombs = append(lapiStreamTombs, &lapiStreamTomb)
 				}
 
 			case <-workerHealth.Dead():
+				// at this point all workers are dead, so kill all the lapiStream routines, since
+				// no worker is listening
+				for _, lapiStreamTomb := range lapiStreamTombs {
+					lapiStreamTomb.Kill(errors.New("the listening worker died"))
+				}
 				return errors.New("halting due to worker death")
 			}
 		}
