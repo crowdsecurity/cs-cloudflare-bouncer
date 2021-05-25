@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"os"
 	"os/signal"
 	"sync"
@@ -62,15 +61,16 @@ func main() {
 	// By using channels, after every nth second feed the decisions to each cf routine.
 	// Each cf routine maintains it's own IP list and cache.
 
-	configPath := flag.String("c", "", "path to config file")
-	flag.Parse()
+	// configPath := flag.String("c", "", "path to config file")
+	// flag.Parse()
 
-	if configPath == nil || *configPath == "" {
-		log.Fatalf("config file required")
-	}
+	// if configPath == nil || *configPath == "" {
+	// 	log.Fatalf("config file required")
+	// }
 
 	ctx := context.Background()
-	conf, err := NewConfig(*configPath)
+	// conf, err := NewConfig(*configPath)
+	conf, err := NewConfig("./cs-cloudflare-bouncer.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}

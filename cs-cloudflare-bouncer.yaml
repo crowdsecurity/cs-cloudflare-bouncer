@@ -1,0 +1,29 @@
+# CrowdSec Config
+crowdsec_lapi_url: http://localhost:8080/
+crowdsec_lapi_key: 46a0bfe8ed98c8f9b2995ad0d3d20056
+crowdsec_update_frequency: 10s
+
+#Cloudflare Config. 
+cloudflare_config:
+  accounts: 
+  - id: 9d0c7e0dda3282e19d0e168f776cbe99 #k
+    token: vf5wQbCXny9Prs1GYghpk5VOFwH9Rr6wWHbTHEVg
+    ip_list_name: crowdsec
+    zones:
+    - remediation: challenge # valid choices are either of challenge, js_challenge, block, allow, log
+      zone_id: a07cf64479c4f2606834f073ac1a671b
+
+  # - id: 2322bd26211a7bfe682e9baad2faf361 #s
+  #   token: vf5wQbCXny9Prs1GYghpk5VOFwH9Rr6wWHbTHEVg
+  #   ip_list_name: crowdsec
+  #   zones:
+  #   - remediation: challenge # valid choices are either of challenge, js_challenge, block, allow, log
+  #     zone_id: e8926cd2f324b8a71e72d1d01db0d176
+
+  update_frequency: 10s # the frequency to update the cloudflare IP list 
+
+# Bouncer Config
+daemon: false
+log_mode: stdout
+log_dir: /var/log/ 
+log_level: debug # valid choices are either debug, info, error 

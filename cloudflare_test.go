@@ -123,13 +123,13 @@ func TestCollectLAPIStream(t *testing.T) {
 
 	worker := CloudflareWorker{}
 	worker.Init()
-	worker.CloudflareIDByDecisionValue["1.2.3.5"] = "abcd"
-	worker.CloudflareIDByDecisionValue["1.2.3.6"] = "abcd"
+	worker.CloudflareIDByIP["1.2.3.5"] = "abcd"
+	worker.CloudflareIDByIP["1.2.3.6"] = "abcd"
 
 	worker.CollectLAPIStream(dummyResponse)
 
-	if len(worker.CloudflareIDByDecisionValue) != 1 {
-		t.Errorf("expected 1 key in 'CloudflareIDByIP' but found %d", len(worker.CloudflareIDByDecisionValue))
+	if len(worker.CloudflareIDByIP) != 1 {
+		t.Errorf("expected 1 key in 'CloudflareIDByIP' but found %d", len(worker.CloudflareIDByIP))
 	}
 
 	if len(worker.DeleteIPMap) != 1 {
