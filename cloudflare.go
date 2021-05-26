@@ -291,40 +291,38 @@ func (worker *CloudflareWorker) CleanUp() {
 }
 
 func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.DecisionsStreamResponse) {
-	worker.Logger.Infof("received %d new decisions", len(streamDecision.New))
+	worker.Logger.Infof("received %d new decisions", len(streamDecision.New)+len(streamDecision.Deleted))
 	for _, decision := range streamDecision.New {
-		if strings.ToUpper(*decision.Scope) == "IP" {
+		switch scope := strings.ToUpper(*decision.Scope); scope {
+		case "IP":
 			worker.AddIPMap[cloudflare.IPListItemCreateRequest{
 				IP:      *decision.Value,
 				Comment: "Added by crowdsec bouncer",
 			}] = true
-		} else if strings.ToUpper(*decision.Scope) == "COUNTRY" {
+
+		case "COUNTRY":
 			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *decision.Value)
 			worker.AddCountryBans = append(worker.AddCountryBans, expr)
-		} else if strings.ToUpper(*decision.Scope) == "AS" {
+
+		case "AS":
 			worker.AddASBans = append(worker.AddASBans, *decision.Value)
+
 		}
 	}
 	for _, decision := range streamDecision.Deleted {
-
-		if strings.ToUpper(*decision.Scope) == "COUNTRY" {
-			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *decision.Value)
-			decision.Value = &expr
-		} else if strings.ToUpper(*decision.Scope) == "AS" {
-			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *decision.Value)
-			decision.Value = &expr
-		}
-
-		if strings.ToUpper(*decision.Scope) == "IP" {
+		switch scope := strings.ToUpper(*decision.Scope); scope {
+		case "IP":
 			if _, ok := worker.CloudflareIDByIP[*decision.Value]; ok {
 				worker.DeleteIPMap[cloudflare.IPListItemDeleteItemRequest{ID: worker.CloudflareIDByIP[*decision.Value]}] = true
 			}
-		} else if strings.ToUpper(*decision.Scope) == "COUNTRY" {
-			worker.Logger.Info("found country delete decision")
-			worker.RemoveCountryBans = append(worker.RemoveCountryBans, *decision.Value)
-		} else if strings.ToUpper(*decision.Scope) == "AS" {
-			worker.Logger.Info("found AS delete decision")
-			worker.RemoveASBans = append(worker.RemoveASBans, *decision.Value)
+
+		case "COUNTRY":
+			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *decision.Value)
+			worker.RemoveCountryBans = append(worker.RemoveCountryBans, expr)
+
+		case "AS":
+			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *decision.Value)
+			worker.RemoveASBans = append(worker.RemoveASBans, expr)
 		}
 	}
 
