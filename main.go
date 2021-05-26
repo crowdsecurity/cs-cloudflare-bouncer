@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"os"
 	"os/signal"
 	"sync"
@@ -40,6 +41,7 @@ func workerDeaths(workerTombs []*tomb.Tomb) {
 		workerDied := false
 		for _, tomb := range workerTombs {
 			if !tomb.Alive() {
+				log.Error(tomb.Err())
 				workerDied = true
 				break
 			}
@@ -61,16 +63,14 @@ func main() {
 	// By using channels, after every nth second feed the decisions to each cf routine.
 	// Each cf routine maintains it's own IP list and cache.
 
-	// configPath := flag.String("c", "", "path to config file")
-	// flag.Parse()
+	configPath := flag.String("c", "", "path to config file")
+	flag.Parse()
 
-	// if configPath == nil || *configPath == "" {
-	// 	log.Fatalf("config file required")
-	// }
-
+	if configPath == nil || *configPath == "" {
+		log.Fatalf("config file required")
+	}
 	ctx := context.Background()
-	// conf, err := NewConfig(*configPath)
-	conf, err := NewConfig("./cs-cloudflare-bouncer.yaml")
+	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
