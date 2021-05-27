@@ -41,6 +41,7 @@ func workerDeaths(workerTombs []*tomb.Tomb) {
 		workerDied := false
 		for _, tomb := range workerTombs {
 			if !tomb.Alive() {
+				log.Error(tomb.Err())
 				workerDied = true
 				break
 			}
@@ -68,7 +69,6 @@ func main() {
 	if configPath == nil || *configPath == "" {
 		log.Fatalf("config file required")
 	}
-
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
 	if err != nil {

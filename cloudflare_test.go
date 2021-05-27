@@ -57,8 +57,17 @@ func (cfAPI *mockCloudflareAPI) DeleteFirewallRule(ctx context.Context, zone str
 	}
 	return nil
 }
-
+func (cfAPI *mockCloudflareAPI) DeleteFirewallRules(ctx context.Context, zoneID string, firewallRuleIDs []string) error {
+	for _, rule := range firewallRuleIDs {
+		cfAPI.DeleteFirewallRule(ctx, zoneID, rule)
+	}
+	return nil
+}
 func (cfAPI *mockCloudflareAPI) DeleteFilter(ctx context.Context, zone string, id string) error {
+	return nil
+}
+
+func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error {
 	return nil
 }
 
@@ -114,8 +123,9 @@ func TestIPFirewallSetUp(t *testing.T) {
 func TestCollectLAPIStream(t *testing.T) {
 	ip1 := "1.2.3.4"
 	ip2 := "1.2.3.5"
-	addedDecisions := &models.Decision{Value: &ip1}
-	deletedDecisions := &models.Decision{Value: &ip2}
+	scope := "ip"
+	addedDecisions := &models.Decision{Value: &ip1, Scope: &scope}
+	deletedDecisions := &models.Decision{Value: &ip2, Scope: &scope}
 	dummyResponse := &models.DecisionsStreamResponse{
 		New:     []*models.Decision{addedDecisions},
 		Deleted: []*models.Decision{deletedDecisions},
@@ -128,7 +138,7 @@ func TestCollectLAPIStream(t *testing.T) {
 
 	worker.CollectLAPIStream(dummyResponse)
 
-	if len(worker.CloudflareIDByIP) != 1 {
+	if len(worker.CloudflareIDByIP) != 2 {
 		t.Errorf("expected 1 key in 'CloudflareIDByIP' but found %d", len(worker.CloudflareIDByIP))
 	}
 
