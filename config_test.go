@@ -36,7 +36,7 @@ func TestNewConfig(t *testing.T) {
 								},
 							},
 							Token:      "${CF_TOKEN}",
-							IPListName: "crowdsec",
+							IPListPrefix: "crowdsec",
 						},
 					},
 					UpdateFrequency: time.Second * 30,

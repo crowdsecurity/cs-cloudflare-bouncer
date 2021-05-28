@@ -54,7 +54,7 @@ cloudflare_config:
   accounts: 
   - id: 
     token: 
-    ip_list_name: crowdsec
+    ip_list_prefix: crowdsec
     zones:
     - remediation: challenge # valid choices are either of challenge, js_challenge, block, allow, log
       zone_id: 

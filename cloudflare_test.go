@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	log "github.com/sirupsen/logrus"
 )
 
 type mockCloudflareAPI struct {
@@ -17,7 +20,7 @@ type mockCloudflareAPI struct {
 }
 
 func (cfAPI *mockCloudflareAPI) Filters(ctx context.Context, zoneID string, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Filter, error) {
-	return make([]cloudflare.Filter, 0), nil
+	return cfAPI.FilterList, nil
 }
 
 func (cfAPI *mockCloudflareAPI) ListZones(ctx context.Context, z ...string) ([]cloudflare.Zone, error) {
@@ -46,6 +49,10 @@ func (cfAPI *mockCloudflareAPI) ListIPLists(ctx context.Context) ([]cloudflare.I
 
 func (cfAPI *mockCloudflareAPI) CreateFirewallRules(ctx context.Context, zone string, rules []cloudflare.FirewallRule) ([]cloudflare.FirewallRule, error) {
 	cfAPI.FirewallRulesList = append(cfAPI.FirewallRulesList, rules...)
+	for i, _ := range cfAPI.FirewallRulesList {
+		cfAPI.FirewallRulesList[i].ID = strconv.Itoa(i)
+		cfAPI.FirewallRulesList[i].Filter.ID = strconv.Itoa(i)
+	}
 	return rules, nil
 }
 func (cfAPI *mockCloudflareAPI) DeleteFirewallRule(ctx context.Context, zone string, id string) error {
@@ -64,10 +71,19 @@ func (cfAPI *mockCloudflareAPI) DeleteFirewallRules(ctx context.Context, zoneID 
 	return nil
 }
 func (cfAPI *mockCloudflareAPI) DeleteFilter(ctx context.Context, zone string, id string) error {
+	for i, j := range cfAPI.FilterList {
+		if j.ID == id {
+			cfAPI.FilterList = append(cfAPI.FilterList[:i], cfAPI.FilterList[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 
 func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error {
+	for _, filterId := range filterIDs {
+		cfAPI.DeleteFilter(ctx, zoneID, filterId)
+	}
 	return nil
 }
 
@@ -85,6 +101,7 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
+
 	return make([]cloudflare.IPListItem, 0), nil
 }
 
@@ -172,4 +189,50 @@ func TestHelpers(t *testing.T) {
 		t.Errorf("expected 2 items in slice instead got %d", len(deleteIPSlice))
 	}
 
+}
+
+func TestCloudflareWorker_deleteRulesContainingString(t *testing.T) {
+	type fields struct {
+		Account           CloudflareAccount
+		API               cloudflareAPI
+	}
+	type args struct {
+		str      string
+		zonesIDs []string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			fields: fields{Account: CloudflareAccount{}},
+		}	// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				Logger:            tt.fields.Logger,
+				Account:           tt.fields.Account,
+				ZoneLocks:         tt.fields.ZoneLocks,
+				Ctx:               tt.fields.Ctx,
+				LAPIStream:        tt.fields.LAPIStream,
+				IPListName:        tt.fields.IPListName,
+				IPListID:          tt.fields.IPListID,
+				UpdateFrequency:   tt.fields.UpdateFrequency,
+				CloudflareIDByIP:  tt.fields.CloudflareIDByIP,
+				DeleteIPMap:       tt.fields.DeleteIPMap,
+				AddIPMap:          tt.fields.AddIPMap,
+				AddASBans:         tt.fields.AddASBans,
+				RemoveASBans:      tt.fields.RemoveASBans,
+				AddCountryBans:    tt.fields.AddCountryBans,
+				RemoveCountryBans: tt.fields.RemoveCountryBans,
+				API:               tt.fields.API,
+			}
+			if err := worker.deleteRulesContainingString(tt.args.str, tt.args.zonesIDs); (err != nil) != tt.wantErr {
+				t.Errorf("CloudflareWorker.deleteRulesContainingString() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
