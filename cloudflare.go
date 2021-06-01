@@ -13,6 +13,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var CloudflareActionByDecisionType = map[string]string{
+	"captcha":      "challenge",
+	"ban":          "block",
+	"js_challenge": "js_challenge",
+}
+
 type ZoneLock struct {
 	Lock   *sync.Mutex
 	ZoneID string
@@ -41,21 +47,21 @@ type cloudflareAPI interface {
 }
 
 type CloudflareWorker struct {
-	Logger            *log.Entry
-	Account           CloudflareAccount
-	ZoneLocks         []ZoneLock
-	Ctx               context.Context
-	LAPIStream        chan *models.DecisionsStreamResponse
-	IPListByRemedy    map[string]cloudflare.IPList
-	UpdateFrequency   time.Duration
-	CloudflareIDByIP  map[string]map[string]string // "ip_list_id" -> "ip" ->"cf_id"
-	AddIPs            IPSet
-	RemoveIPs         IPSet
-	AddASBans         []string
-	RemoveASBans      []string
-	AddCountryBans    []string
-	RemoveCountryBans []string // cloudflare country ban ids
-	API               cloudflareAPI
+	Logger                  *log.Entry
+	Account                 CloudflareAccount
+	ZoneLocks               []ZoneLock
+	Ctx                     context.Context
+	LAPIStream              chan *models.DecisionsStreamResponse
+	IPListByRemedy          map[string]cloudflare.IPList
+	UpdateFrequency         time.Duration
+	CloudflareIDByIP        map[string]map[string]string // "ip_list_id" -> "ip" ->"cf_id"
+	AddIPs                  IPSet
+	RemoveIPs               IPSet
+	NewASDecisions          []*models.Decision
+	ExpiredASDecisions      []*models.Decision
+	NewCountryDecisions     []*models.Decision
+	ExpiredCountryDecisions []*models.Decision
+	API                     cloudflareAPI
 }
 
 func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, error) {
@@ -380,11 +386,10 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 			}
 
 		case "COUNTRY":
-			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *decision.Value)
-			worker.AddCountryBans = append(worker.AddCountryBans, expr)
+			worker.NewCountryDecisions = append(worker.NewCountryDecisions, decision)
 
 		case "AS":
-			worker.AddASBans = append(worker.AddASBans, *decision.Value)
+			worker.NewASDecisions = append(worker.NewASDecisions, decision)
 
 		}
 	}
@@ -403,12 +408,10 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 			}
 
 		case "COUNTRY":
-			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *decision.Value)
-			worker.RemoveCountryBans = append(worker.RemoveCountryBans, expr)
+			worker.ExpiredCountryDecisions = append(worker.ExpiredCountryDecisions, decision)
 
 		case "AS":
-			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *decision.Value)
-			worker.RemoveASBans = append(worker.RemoveASBans, expr)
+			worker.ExpiredASDecisions = append(worker.ExpiredASDecisions, decision)
 		}
 	}
 
@@ -432,18 +435,24 @@ func (worker *CloudflareWorker) SendASBans() error {
 		}
 
 		ASBans := make([]cloudflare.FirewallRule, 0)
-		for _, ASBan := range worker.AddASBans {
-			expression := fmt.Sprintf("ip.geoip.asnum eq %s", ASBan)
-			if _, existsInRuleSet := ruleSet[expression]; !existsInRuleSet {
-				ASBans = append(ASBans, cloudflare.FirewallRule{
-					Filter:      cloudflare.Filter{Expression: expression},
-					Description: "CrowdSec AS Ban",
-					Action:      "challenge",
-					// Action:      zone.Remediation,
-				})
-				ruleSet[expression] = struct{}{}
+		for _, ASBan := range worker.NewASDecisions {
+			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *ASBan.Value)
+			var action string
+			if _, ok := CloudflareActionByDecisionType[*ASBan.Type]; !ok {
+				action = zone.Remediation[0]
 			} else {
-				zoneLogger.Debugf("rule with expression %s already exists", expression)
+				action = CloudflareActionByDecisionType[*ASBan.Type]
+			}
+
+			if _, existsInRuleSet := ruleSet[expr]; !existsInRuleSet {
+				ASBans = append(ASBans, cloudflare.FirewallRule{
+					Filter:      cloudflare.Filter{Expression: expr},
+					Description: "CrowdSec AS Ban",
+					Action:      action,
+				})
+				ruleSet[expr] = struct{}{}
+			} else {
+				zoneLogger.Debugf("rule with expression %s already exists", expr)
 			}
 		}
 		if len(ASBans) > 0 {
@@ -455,29 +464,30 @@ func (worker *CloudflareWorker) SendASBans() error {
 			}
 		}
 	}
-	worker.AddASBans = make([]string, 0)
+	worker.NewASDecisions = make([]*models.Decision, 0)
 	return nil
 }
 
 func (worker *CloudflareWorker) DeleteASBans() error {
 	for _, zone := range worker.Account.Zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
-		for _, ASBan := range worker.RemoveASBans {
-			err := worker.deleteRulesContainingString(ASBan, extractZoneIDs(worker.Account.Zones))
+		for _, ASBan := range worker.ExpiredASDecisions {
+			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *ASBan.Value)
+			err := worker.deleteRulesContainingString(expr, extractZoneIDs(worker.Account.Zones))
 			if err != nil {
 				return err
 			}
-			err = worker.deleteFiltersContainingString(ASBan, extractZoneIDs(worker.Account.Zones))
+			err = worker.deleteFiltersContainingString(expr, extractZoneIDs(worker.Account.Zones))
 			if err != nil {
 				return err
 			}
 		}
-		if len(worker.RemoveASBans) > 0 {
-			zoneLogger.Infof("deleted %d AS bans", len(worker.RemoveASBans))
+		if len(worker.ExpiredASDecisions) > 0 {
+			zoneLogger.Infof("deleted %d AS bans", len(worker.ExpiredASDecisions))
 		}
 
 	}
-	worker.RemoveASBans = make([]string, 0)
+	worker.ExpiredASDecisions = make([]*models.Decision, 0)
 	return nil
 
 }
@@ -489,25 +499,32 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 
 		//This set is used to ensure we don't send dups
 		countryBanSet := make(map[string]struct{})
-		for _, countryBan := range worker.AddCountryBans {
-			if _, ok := countryBanSet[countryBan]; ok {
+		for _, countryBan := range worker.NewCountryDecisions {
+			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *countryBan.Value)
+			if _, ok := countryBanSet[expr]; ok {
 				continue
 			}
-			countryBanSet[countryBan] = struct{}{}
-			err := worker.deleteRulesContainingString(countryBan, []string{zone.ID})
+			var action string
+			if a, ok := CloudflareActionByDecisionType[*countryBan.Type]; ok {
+				action = a
+			} else {
+				action = zone.Remediation[0]
+			}
+			countryBanSet[expr] = struct{}{}
+			err := worker.deleteRulesContainingString(expr, []string{zone.ID})
 			if err != nil {
 				return err
 			}
-			err = worker.deleteFiltersContainingString(countryBan, []string{zone.ID})
+			err = worker.deleteFiltersContainingString(expr, []string{zone.ID})
 			if err != nil {
 				return err
 			}
 			countryBans = append(countryBans, cloudflare.FirewallRule{
 				Description: "Country Ban by CrowdSec",
 				Filter: cloudflare.Filter{
-					Expression: countryBan,
+					Expression: expr,
 				},
-				Action: "challenge",
+				Action: action,
 			})
 
 		}
@@ -519,23 +536,25 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 			zoneLogger.Infof("added %d country bans", len(countryBans))
 		}
 	}
-	worker.AddCountryBans = make([]string, 0)
+	worker.NewCountryDecisions = make([]*models.Decision, 0)
 	return nil
 }
 
 func (worker *CloudflareWorker) DeleteCountryBans() error {
 
 	// cloudflare also provides API.DeleteFirewallRules to delete all the rules in one shot
-	for _, countryBan := range worker.RemoveCountryBans {
-		err := worker.deleteRulesContainingString(countryBan, extractZoneIDs(worker.Account.Zones))
+	for _, countryBan := range worker.ExpiredCountryDecisions {
+		expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *countryBan.Value)
+		err := worker.deleteRulesContainingString(expr, extractZoneIDs(worker.Account.Zones))
 		if err != nil {
 			return err
 		}
-		err = worker.deleteFiltersContainingString(countryBan, extractZoneIDs(worker.Account.Zones))
+		err = worker.deleteFiltersContainingString(expr, extractZoneIDs(worker.Account.Zones))
 		if err != nil {
 			return err
 		}
 	}
+	worker.ExpiredCountryDecisions = make([]*models.Decision, 0)
 	return nil
 }
 
@@ -576,27 +595,27 @@ func (worker *CloudflareWorker) Run() error {
 				return err
 			}
 
-			if len(worker.AddCountryBans) > 0 {
+			if len(worker.NewCountryDecisions) > 0 {
 				err = worker.SendCountryBans()
 				if err != nil {
 					return err
 				}
 			}
-			if len(worker.RemoveCountryBans) > 1 {
+			if len(worker.ExpiredCountryDecisions) > 1 {
 				err = worker.DeleteCountryBans()
 				if err != nil {
 					return err
 				}
 			}
 
-			if len(worker.AddASBans) > 0 {
+			if len(worker.NewASDecisions) > 0 {
 				err = worker.SendASBans()
 				if err != nil {
 					return err
 				}
 			}
 
-			if len(worker.RemoveASBans) > 0 {
+			if len(worker.ExpiredASDecisions) > 0 {
 				err = worker.DeleteASBans()
 				if err != nil {
 					return err
