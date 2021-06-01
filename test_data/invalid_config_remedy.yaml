@@ -9,7 +9,8 @@ cloudflare_config:
     token: ${CF_TOKEN} 
     ip_list_prefix: crowdsec
     zones:
-    - remediation: block
+    - remediation: 
+      - block
       zone_id: ${CF_ZONE_ID} 
 
   update_frequency: 30s

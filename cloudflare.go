@@ -309,7 +309,8 @@ func (worker *CloudflareWorker) Init() error {
 			}
 
 			for _, remedy := range z.Remediation {
-				worker.IPListByRemedy[remedy] = cloudflare.IPList{Name: worker.Account.IPListPrefix + remedy}
+				listName := fmt.Sprintf("%s_%s", worker.Account.IPListPrefix, remedy)
+				worker.IPListByRemedy[remedy] = cloudflare.IPList{Name: listName}
 				worker.NewIPSet[remedy] = make(map[string]struct{})
 				worker.ExpiredIPSet[remedy] = make(map[string]struct{})
 			}
@@ -331,7 +332,8 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 	for _, decision := range streamDecision.New {
 		switch scope := strings.ToUpper(*decision.Scope); scope {
 		case "IP", "RANGE":
-			if IPSet, ok := worker.NewIPSet[CloudflareActionByDecisionType[*decision.Type]]; ok {
+			cfAction := CloudflareActionByDecisionType[*decision.Type]
+			if IPSet, ok := worker.NewIPSet[cfAction]; ok {
 				IPSet[*decision.Value] = struct{}{}
 			}
 		case "COUNTRY":
@@ -345,7 +347,8 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 	for _, decision := range streamDecision.Deleted {
 		switch scope := strings.ToUpper(*decision.Scope); scope {
 		case "IP", "RANGE":
-			if IPSet, ok := worker.ExpiredIPSet[CloudflareActionByDecisionType[*decision.Type]]; ok {
+			cfAction := CloudflareActionByDecisionType[*decision.Type]
+			if IPSet, ok := worker.ExpiredIPSet[cfAction]; ok {
 				IPSet[*decision.Value] = struct{}{}
 			}
 

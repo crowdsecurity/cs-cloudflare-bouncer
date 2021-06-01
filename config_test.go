@@ -32,10 +32,10 @@ func TestNewConfig(t *testing.T) {
 							Zones: []CloudflareZone{
 								{
 									ID:          "${CF_ZONE_ID}",
-									Remediation: "block",
+									Remediation: []string{"block"},
 								},
 							},
-							Token:      "${CF_TOKEN}",
+							Token:        "${CF_TOKEN}",
 							IPListPrefix: "crowdsec",
 						},
 					},

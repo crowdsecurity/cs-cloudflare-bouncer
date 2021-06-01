@@ -80,7 +80,6 @@ func main() {
 		APIKey:         conf.CrowdSecLAPIKey,
 		APIUrl:         conf.CrowdSecLAPIUrl,
 		TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
-		Scopes:         []string{"ip", "range", "country", "as"},
 	}
 
 	if err := csLapi.Init(); err != nil {
