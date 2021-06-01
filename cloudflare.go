@@ -338,9 +338,7 @@ func (worker *CloudflareWorker) Init() error {
 			if !zone.Plan.IsSubscribed && len(z.Remediation) > 1 {
 				return fmt.Errorf("zone %s 's plan doesn't support multiple remediations", z.ID)
 			}
-			// } else if zone.Plan.IsSubscribed && len(z.Remediation) > 1 {
 
-			// }
 			for _, remedy := range z.Remediation {
 				worker.IPListByRemedy[remedy] = cloudflare.IPList{Name: worker.Account.IPListPrefix + remedy}
 			}
@@ -484,46 +482,46 @@ func (worker *CloudflareWorker) DeleteASBans() error {
 
 }
 
-// func (worker *CloudflareWorker) SendCountryBans() error {
-// 	for _, zone := range worker.Account.Zones {
-// 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
-// 		countryBans := make([]cloudflare.FirewallRule, 0)
+func (worker *CloudflareWorker) SendCountryBans() error {
+	for _, zone := range worker.Account.Zones {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+		countryBans := make([]cloudflare.FirewallRule, 0)
 
-// 		//This set is used to ensure we don't send dups
-// 		countryBanSet := make(map[string]struct{})
-// 		for _, countryBan := range worker.AddCountryBans {
-// 			if _, ok := countryBanSet[countryBan]; ok {
-// 				continue
-// 			}
-// 			countryBanSet[countryBan] = struct{}{}
-// 			err := worker.deleteRulesContainingString(countryBan, []string{zone.ID})
-// 			if err != nil {
-// 				return err
-// 			}
-// 			err = worker.deleteFiltersContainingString(countryBan, []string{zone.ID})
-// 			if err != nil {
-// 				return err
-// 			}
-// 			countryBans = append(countryBans, cloudflare.FirewallRule{
-// 				Description: "Country Ban by CrowdSec",
-// 				Filter: cloudflare.Filter{
-// 					Expression: countryBan,
-// 				},
-// 				Action: zone.Remediation,
-// 			})
+		//This set is used to ensure we don't send dups
+		countryBanSet := make(map[string]struct{})
+		for _, countryBan := range worker.AddCountryBans {
+			if _, ok := countryBanSet[countryBan]; ok {
+				continue
+			}
+			countryBanSet[countryBan] = struct{}{}
+			err := worker.deleteRulesContainingString(countryBan, []string{zone.ID})
+			if err != nil {
+				return err
+			}
+			err = worker.deleteFiltersContainingString(countryBan, []string{zone.ID})
+			if err != nil {
+				return err
+			}
+			countryBans = append(countryBans, cloudflare.FirewallRule{
+				Description: "Country Ban by CrowdSec",
+				Filter: cloudflare.Filter{
+					Expression: countryBan,
+				},
+				Action: "challenge",
+			})
 
-// 		}
-// 		if len(countryBans) > 0 {
-// 			_, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, countryBans)
-// 			if err != nil {
-// 				return err
-// 			}
-// 			zoneLogger.Infof("added %d country bans", len(countryBans))
-// 		}
-// 	}
-// 	worker.AddCountryBans = make([]string, 0)
-// 	return nil
-// }
+		}
+		if len(countryBans) > 0 {
+			_, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, countryBans)
+			if err != nil {
+				return err
+			}
+			zoneLogger.Infof("added %d country bans", len(countryBans))
+		}
+	}
+	worker.AddCountryBans = make([]string, 0)
+	return nil
+}
 
 func (worker *CloudflareWorker) DeleteCountryBans() error {
 
@@ -577,22 +575,33 @@ func (worker *CloudflareWorker) Run() error {
 			if err != nil {
 				return err
 			}
-			// err = worker.SendCountryBans()
-			// if err != nil {
-			// 	return err
-			// }
-			// err = worker.DeleteCountryBans()
-			// if err != nil {
-			// 	return err
-			// }
-			// err = worker.SendASBans()
-			// if err != nil {
-			// 	return err
-			// }
-			// err = worker.DeleteASBans()
-			// if err != nil {
-			// 	return err
-			// }
+
+			if len(worker.AddCountryBans) > 0 {
+				err = worker.SendCountryBans()
+				if err != nil {
+					return err
+				}
+			}
+			if len(worker.RemoveCountryBans) > 1 {
+				err = worker.DeleteCountryBans()
+				if err != nil {
+					return err
+				}
+			}
+
+			if len(worker.AddASBans) > 0 {
+				err = worker.SendASBans()
+				if err != nil {
+					return err
+				}
+			}
+
+			if len(worker.RemoveASBans) > 0 {
+				err = worker.DeleteASBans()
+				if err != nil {
+					return err
+				}
+			}
 
 		case decisions := <-worker.LAPIStream:
 			worker.Logger.Info("processing new and deleted decisions from crowdsec LAPI")

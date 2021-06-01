@@ -68,7 +68,7 @@ func main() {
 
 	if configPath == nil || *configPath == "" {
 		log.Fatalf("config file required")
-		
+
 	}
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
@@ -80,6 +80,7 @@ func main() {
 		APIKey:         conf.CrowdSecLAPIKey,
 		APIUrl:         conf.CrowdSecLAPIUrl,
 		TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
+		Scopes:         []string{"ip", "range", "country", "as"},
 	}
 
 	if err := csLapi.Init(); err != nil {
