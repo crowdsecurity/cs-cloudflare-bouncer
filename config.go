@@ -108,13 +108,3 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 
 	return config, nil
 }
-
-// func main() {
-// 	z, err := NewConfig("./cs-cloudflare-bouncer.yaml")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	fmt.Printf("%+v", z)
-
-// }

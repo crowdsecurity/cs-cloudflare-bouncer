@@ -12,7 +12,7 @@
 
 # CrowdSec Cloudflare Bouncer
 
-A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall.Manages multi user, multi account, multi zone setup. 
+A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall. Manages multi user, multi account, multi zone setup. Supports IP, Country and AS scoped decisions.
 
 # Installation
 
@@ -56,7 +56,8 @@ cloudflare_config:
     token: 
     ip_list_prefix: crowdsec
     zones:
-    - remediation: challenge # valid choices are either of challenge, js_challenge, block, allow, log
+    - remediation: 
+      - challenge # valid choices are either of challenge, js_challenge, block
       zone_id: 
 
   update_frequency: 30s # the frequency to update the cloudflare IP list 
@@ -84,9 +85,14 @@ For obtaining the account `id`, and `zone_id`:
 1. Go to each of the "domain dashboard".
 2. In the bottom left corner you would see the domain's `zone_id` and the owner account's `id`
 
+If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of remediations. For free plan zones only one remdiation is supported. 
+
+The first remdiation is applied as default remediation.
+
 # How it works
 
-When the service starts, it creates a CloudFlare IP list for each specified account. (by default it is named as `crowdsec`. It then creates a firewall rule for each of the provided `zone` which applies certain remediation on all the IPs present in this list. By default this remediation is `challenge` but can be changed in the configuration to either `allow`, `log`, `challenge`, `js_challenge`.
+The service polls the CrowdSec Local API for new decisions. It then makes API calls to Cloudflare
+to update IP lists and firewall rules depending upon the decision.
 
 
 # Troubleshooting

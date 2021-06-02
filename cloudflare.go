@@ -383,24 +383,44 @@ func (worker *CloudflareWorker) SendASBans() error {
 		for _, ASBan := range worker.NewASDecisions {
 			expr := fmt.Sprintf("ip.geoip.asnum eq %s", *ASBan.Value)
 			var action string
+			defaulted := false
 			if _, ok := CloudflareActionByDecisionType[*ASBan.Type]; !ok {
 				action = zone.Remediation[0]
+				defaulted = true
 			} else {
 				action = CloudflareActionByDecisionType[*ASBan.Type]
 			}
-
+			rule := cloudflare.FirewallRule{
+				Filter:      cloudflare.Filter{Expression: expr},
+				Description: "CrowdSec AS Ban",
+				Action:      action,
+			}
 			if _, existsInRuleSet := ruleSet[expr]; !existsInRuleSet {
-				ASBans = append(ASBans, cloudflare.FirewallRule{
-					Filter:      cloudflare.Filter{Expression: expr},
-					Description: "CrowdSec AS Ban",
-					Action:      action,
-				})
+				ASBans = append(ASBans, rule)
 				ruleSet[expr] = struct{}{}
+			} else if !defaulted && existsInRuleSet {
+				for i, r := range ASBans {
+					if r.Filter.Expression == expr {
+						ASBans = append(ASBans[:i], ASBans[i+1:]...)
+					}
+				}
+				ASBans = append(ASBans, rule)
 			} else {
 				zoneLogger.Debugf("rule with expression %s already exists", expr)
 			}
 		}
 		if len(ASBans) > 0 {
+			for _, ban := range ASBans {
+				err := worker.deleteRulesContainingString(ban.Filter.Expression, []string{zone.ID})
+				if err != nil {
+					return err
+				}
+				err = worker.deleteFiltersContainingString(ban.Filter.Expression, []string{zone.ID})
+				if err != nil {
+					return err
+				}
+			}
+
 			zoneLogger.Infof("sending %d AS bans", len(ASBans))
 			_, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, ASBans)
 			if err != nil {
@@ -446,34 +466,49 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 		countryBanSet := make(map[string]struct{})
 		for _, countryBan := range worker.NewCountryDecisions {
 			expr := fmt.Sprintf(`ip.geoip.country eq "%s"`, *countryBan.Value)
-			if _, ok := countryBanSet[expr]; ok {
-				continue
-			}
 			var action string
+			defaulted := false
 			if a, ok := CloudflareActionByDecisionType[*countryBan.Type]; ok {
 				action = a
 			} else {
 				action = zone.Remediation[0]
+				defaulted = true
 			}
-			countryBanSet[expr] = struct{}{}
-			err := worker.deleteRulesContainingString(expr, []string{zone.ID})
-			if err != nil {
-				return err
-			}
-			err = worker.deleteFiltersContainingString(expr, []string{zone.ID})
-			if err != nil {
-				return err
-			}
-			countryBans = append(countryBans, cloudflare.FirewallRule{
+
+			rule := cloudflare.FirewallRule{
 				Description: "Country Ban by CrowdSec",
 				Filter: cloudflare.Filter{
 					Expression: expr,
 				},
 				Action: action,
-			})
+			}
+
+			if _, existsInRuleSet := countryBanSet[expr]; !existsInRuleSet {
+				countryBans = append(countryBans, rule)
+				countryBanSet[expr] = struct{}{}
+			} else if !defaulted && existsInRuleSet {
+				for i, r := range countryBans {
+					if r.Filter.Expression == expr {
+						countryBans = append(countryBans[:i], countryBans[i+1:]...)
+					}
+				}
+				countryBans = append(countryBans, rule)
+			} else {
+				zoneLogger.Debugf("rule with expression %s already exists", expr)
+			}
 
 		}
 		if len(countryBans) > 0 {
+			for _, ban := range countryBans {
+				err := worker.deleteRulesContainingString(ban.Filter.Expression, []string{zone.ID})
+				if err != nil {
+					return err
+				}
+				err = worker.deleteFiltersContainingString(ban.Filter.Expression, []string{zone.ID})
+				if err != nil {
+					return err
+				}
+			}
 			_, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, countryBans)
 			if err != nil {
 				return err
@@ -529,14 +564,21 @@ func (worker *CloudflareWorker) Run() error {
 		select {
 		case <-ticker.C:
 			// TODO: all of the below functions can be grouped and ran in separate goroutines for better performance
-			err := worker.AddNewIPs()
+			err := worker.DeleteIPs()
 			if err != nil {
 				return err
 			}
 
-			err = worker.DeleteIPs()
+			err = worker.AddNewIPs()
 			if err != nil {
 				return err
+			}
+
+			if len(worker.ExpiredCountryDecisions) > 1 {
+				err = worker.DeleteCountryBans()
+				if err != nil {
+					return err
+				}
 			}
 
 			if len(worker.NewCountryDecisions) > 0 {
@@ -545,8 +587,9 @@ func (worker *CloudflareWorker) Run() error {
 					return err
 				}
 			}
-			if len(worker.ExpiredCountryDecisions) > 1 {
-				err = worker.DeleteCountryBans()
+
+			if len(worker.ExpiredASDecisions) > 0 {
+				err = worker.DeleteASBans()
 				if err != nil {
 					return err
 				}
@@ -554,13 +597,6 @@ func (worker *CloudflareWorker) Run() error {
 
 			if len(worker.NewASDecisions) > 0 {
 				err = worker.SendASBans()
-				if err != nil {
-					return err
-				}
-			}
-
-			if len(worker.ExpiredASDecisions) > 0 {
-				err = worker.DeleteASBans()
 				if err != nil {
 					return err
 				}
