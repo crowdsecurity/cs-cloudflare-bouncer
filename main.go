@@ -68,6 +68,7 @@ func main() {
 
 	if configPath == nil || *configPath == "" {
 		log.Fatalf("config file required")
+
 	}
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
@@ -108,7 +109,6 @@ func main() {
 				Ctx:             ctx,
 				ZoneLocks:       zoneLocks,
 				LAPIStream:      lapiStream,
-				IPListName:      account.IPListName,
 				UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
 			}
 			var workerTomb tomb.Tomb

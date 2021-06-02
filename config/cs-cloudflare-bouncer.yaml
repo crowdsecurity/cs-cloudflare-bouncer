@@ -8,9 +8,10 @@ cloudflare_config:
   accounts: 
   - id: 
     token: 
-    ip_list_name: crowdsec
+    ip_list_prefix: crowdsec
     zones:
-    - remediation: challenge # valid choices are either of challenge, js_challenge, block, allow, log
+    - remediation: 
+      - challenge # valid choices are either of challenge, js_challenge, block
       zone_id: 
 
   update_frequency: 30s # the frequency to update the cloudflare IP list 
