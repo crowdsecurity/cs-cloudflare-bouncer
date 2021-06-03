@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -37,21 +38,25 @@ func HandleSignals(ctx context.Context) {
 }
 
 func workerDeaths(workerTombs []*tomb.Tomb) {
+	ticker := time.NewTicker(time.Second)
 	for {
-		workerDied := false
-		for _, tomb := range workerTombs {
-			if !tomb.Alive() {
-				log.Error(tomb.Err())
-				workerDied = true
-				break
-			}
-		}
-		// if any  worker dies, kill all the rest of the workers
-		if workerDied {
+		select {
+		case <-ticker.C:
+			workerDied := false
 			for _, tomb := range workerTombs {
-				tomb.Kill(errors.New("peer worker died"))
+				if !tomb.Alive() {
+					log.Error(tomb.Err())
+					workerDied = true
+					break
+				}
 			}
-			return
+			// if any  worker dies, kill all the rest of the workers
+			if workerDied {
+				for _, tomb := range workerTombs {
+					tomb.Kill(errors.New("peer worker died"))
+				}
+				return
+			}
 		}
 
 	}
