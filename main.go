@@ -91,8 +91,6 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 
-	go csLapi.Run()
-
 	t.Go(func() error {
 		zoneLocks := make([]ZoneLock, 0)
 		for _, account := range conf.CloudflareConfig.Accounts {
@@ -105,16 +103,19 @@ func main() {
 		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 		workerTombs := make([]*tomb.Tomb, 0)
 		var lapiStreamTombs []*tomb.Tomb
+		var wg sync.WaitGroup
 
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
 			lapiStreams = append(lapiStreams, lapiStream)
+			wg.Add(1)
 			worker := CloudflareWorker{
 				Account:         account,
 				Ctx:             ctx,
 				ZoneLocks:       zoneLocks,
 				LAPIStream:      lapiStream,
 				UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
+				Wg:              &wg,
 			}
 			var workerTomb tomb.Tomb
 			workerTomb.Go(func() error {
@@ -129,7 +130,8 @@ func main() {
 			workerDeaths(workerTombs)
 			return nil
 		})
-
+		wg.Wait()
+		go csLapi.Run()
 		for {
 			select {
 			case decisions := <-csLapi.Stream:
