@@ -72,7 +72,7 @@ func main() {
 	configPath := flag.String("c", "", "path to config file")
 	flag.Parse()
 
-	if configTokens != nil {
+	if configTokens != nil && *configTokens != "" {
 		ConfigTokens(*configTokens)
 		return
 	}

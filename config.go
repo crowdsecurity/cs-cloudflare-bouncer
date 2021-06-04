@@ -114,6 +114,8 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 
 func ConfigTokens(tokens string) error {
 	accountConfig := make([]CloudflareAccount, 0)
+	zoneByID := make(map[string]cloudflare.Zone)
+	accountByID := make(map[string]cloudflare.Account)
 	for _, token := range strings.Split(tokens, ",") {
 		api, err := cloudflare.NewWithAPIToken(token)
 		if err != nil {
@@ -133,12 +135,14 @@ func ConfigTokens(tokens string) error {
 			})
 
 			api.AccountID = account.ID
+			accountByID[account.ID] = account
 			zones, err := api.ListZones(ctx)
 			if err != nil {
 				log.Fatal(err)
 			}
 
 			for _, zone := range zones {
+				zoneByID[zone.ID] = zone
 				if zone.Account.ID == account.ID {
 					accountConfig[i].Zones = append(accountConfig[i].Zones, CloudflareZone{
 						ID:          zone.ID,
@@ -153,7 +157,20 @@ func ConfigTokens(tokens string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(data))
+
+	lines := string(data)
+	for _, line := range strings.Split(lines, "\n") {
+		words := strings.Split(line, " ")
+		lastWord := words[len(words)-1]
+		if zone, ok := zoneByID[lastWord]; ok {
+			fmt.Printf("%s #%s\n", line, zone.Name)
+		} else if account, ok := accountByID[lastWord]; ok {
+			fmt.Printf("%s #%s\n", line, account.Name)
+		} else {
+			fmt.Println(line)
+		}
+	}
+
 	fmt.Println("--------------------------------")
 	fmt.Println("Paste this under 'cloudflare_config' in bouncer's config file")
 	if err != nil {
