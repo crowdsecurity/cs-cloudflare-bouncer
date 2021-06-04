@@ -76,6 +76,28 @@ func extractZoneIDs(zones []CloudflareZone) []string {
 	return zoneIDs
 }
 
+func min(a int, b int) int {
+	if a > b {
+		return b
+	}
+	return a
+}
+
+func normalizeIP(ip string) string {
+	if strings.Count(ip, ":") <= 1 {
+		// it is a ipv4
+		return ip
+	}
+	
+	comps := strings.Split(ip, "::")
+	// comps[0] would be the IP part and comps[1] (if present) would be the either remaining IP or CIDR
+	// we don't care about remaining IP because last digits can be changed.
+	ipBlocks := strings.Split(comps[0], ":")
+	blockCount := min(4, len(ipBlocks))
+	cidr := blockCount * 16
+	return strings.Join(ipBlocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
+}
+
 func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs []string) error {
 	for _, zoneID := range zonesIDs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneID})
@@ -354,7 +376,8 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 		case "IP", "RANGE":
 			cfAction := CloudflareActionByDecisionType[*decision.Type]
 			if IPSet, ok := worker.NewIPSet[cfAction]; ok {
-				IPSet[*decision.Value] = struct{}{}
+				ip := normalizeIP(*decision.Value)
+				IPSet[ip] = struct{}{}
 			}
 			catched = true
 		case "COUNTRY":
@@ -380,7 +403,8 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 		case "IP", "RANGE":
 			cfAction := CloudflareActionByDecisionType[*decision.Type]
 			if IPSet, ok := worker.ExpiredIPSet[cfAction]; ok {
-				IPSet[*decision.Value] = struct{}{}
+				ip := normalizeIP(*decision.Value)
+				IPSet[ip] = struct{}{}
 			}
 			catched = true
 
