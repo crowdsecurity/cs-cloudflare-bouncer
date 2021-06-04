@@ -68,13 +68,18 @@ func main() {
 	// By using channels, after every nth second feed the decisions to each cf routine.
 	// Each cf routine maintains it's own IP list and cache.
 
+	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
 	configPath := flag.String("c", "", "path to config file")
 	flag.Parse()
 
+	if configTokens != nil {
+		ConfigTokens(*configTokens)
+		return
+	}
 	if configPath == nil || *configPath == "" {
 		log.Fatalf("config file required")
-
 	}
+
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
 	if err != nil {
