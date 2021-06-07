@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/types"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type CloudflareZone struct {
@@ -46,7 +49,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to read %s : %v", configPath, err)
 	}
 
-	err = yaml.UnmarshalStrict(configBuff, &config)
+	err = yaml.Unmarshal(configBuff, &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
@@ -107,4 +110,71 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 
 	return config, nil
+}
+
+func ConfigTokens(tokens string) error {
+	accountConfig := make([]CloudflareAccount, 0)
+	zoneByID := make(map[string]cloudflare.Zone)
+	accountByID := make(map[string]cloudflare.Account)
+	for _, token := range strings.Split(tokens, ",") {
+		api, err := cloudflare.NewWithAPIToken(token)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ctx := context.Background()
+		accounts, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{})
+		if err != nil {
+			return err
+		}
+		for i, account := range accounts {
+			accountConfig = append(accountConfig, CloudflareAccount{
+				ID:           account.ID,
+				Zones:        make([]CloudflareZone, 0),
+				Token:        token,
+				IPListPrefix: "crowdsec",
+			})
+
+			api.AccountID = account.ID
+			accountByID[account.ID] = account
+			zones, err := api.ListZones(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			for _, zone := range zones {
+				zoneByID[zone.ID] = zone
+				if zone.Account.ID == account.ID {
+					accountConfig[i].Zones = append(accountConfig[i].Zones, CloudflareZone{
+						ID:          zone.ID,
+						Remediation: []string{"challenge"},
+					})
+				}
+			}
+		}
+	}
+	cfConfig := CloudflareConfig{Accounts: accountConfig, UpdateFrequency: time.Second * 10}
+	data, err := yaml.Marshal(cfConfig)
+	if err != nil {
+		return err
+	}
+
+	lines := string(data)
+	for _, line := range strings.Split(lines, "\n") {
+		words := strings.Split(line, " ")
+		lastWord := words[len(words)-1]
+		if zone, ok := zoneByID[lastWord]; ok {
+			fmt.Printf("%s #%s\n", line, zone.Name)
+		} else if account, ok := accountByID[lastWord]; ok {
+			fmt.Printf("%s #%s\n", line, account.Name)
+		} else {
+			fmt.Println(line)
+		}
+	}
+
+	fmt.Println("--------------------------------")
+	fmt.Println("Paste this under 'cloudflare_config' in bouncer's config file")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return nil
 }

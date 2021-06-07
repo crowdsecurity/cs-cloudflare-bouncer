@@ -56,6 +56,7 @@ type CloudflareWorker struct {
 	NewCountryDecisions     []*models.Decision
 	ExpiredCountryDecisions []*models.Decision
 	API                     cloudflareAPI
+	Wg                      *sync.WaitGroup
 }
 
 func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, error) {
@@ -73,6 +74,28 @@ func extractZoneIDs(zones []CloudflareZone) []string {
 		zoneIDs[i] = zone.ID
 	}
 	return zoneIDs
+}
+
+func min(a int, b int) int {
+	if a > b {
+		return b
+	}
+	return a
+}
+
+func normalizeIP(ip string) string {
+	if strings.Count(ip, ":") <= 1 {
+		// it is a ipv4
+		return ip
+	}
+	
+	comps := strings.Split(ip, "::")
+	// comps[0] would be the IP part and comps[1] (if present) would be the either remaining IP or CIDR
+	// we don't care about remaining IP because last digits can be changed.
+	ipBlocks := strings.Split(comps[0], ":")
+	blockCount := min(4, len(ipBlocks))
+	cidr := blockCount * 16
+	return strings.Join(ipBlocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
 }
 
 func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs []string) error {
@@ -282,6 +305,8 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 }
 
 func (worker *CloudflareWorker) Init() error {
+
+	defer worker.Wg.Done()
 	var err error
 
 	worker.Logger = log.WithFields(log.Fields{"account_id": worker.Account.ID})
@@ -289,6 +314,7 @@ func (worker *CloudflareWorker) Init() error {
 	worker.IPListByRemedy = make(map[string]cloudflare.IPList)
 	worker.NewIPSet = make(map[string]map[string]struct{})
 	worker.ExpiredIPSet = make(map[string]map[string]struct{})
+	worker.CloudflareIDByIP = make(map[string]map[string]string)
 
 	if worker.API == nil {
 		worker.API, err = cloudflare.NewWithAPIToken(worker.Account.Token, cloudflare.UsingAccount(worker.Account.ID))
@@ -318,8 +344,20 @@ func (worker *CloudflareWorker) Init() error {
 			return fmt.Errorf("account %s doesn't have access to one %s", worker.Account.ID, z.ID)
 		}
 	}
+	worker.Logger.Debug("setup of API complete")
+	err = worker.setUpIPList()
 
-	worker.CloudflareIDByIP = make(map[string]map[string]string)
+	if err != nil {
+		worker.Logger.Errorf("error %s in creating IP List", err.Error())
+		return err
+	}
+
+	worker.Logger.Debug("ip list setup complete")
+	err = worker.SetUpRules()
+	if err != nil {
+		worker.Logger.Error(err.Error())
+		return err
+	}
 	return err
 }
 
@@ -328,35 +366,60 @@ func (worker *CloudflareWorker) CleanUp() {
 }
 
 func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.DecisionsStreamResponse) {
-	worker.Logger.Infof("received %d new decisions", len(streamDecision.New)+len(streamDecision.Deleted))
+	worker.Logger.Infof("received %d decisions, %d are new , %d are expired",
+		len(streamDecision.New)+len(streamDecision.Deleted), len(streamDecision.New), len(streamDecision.Deleted),
+	)
+
 	for _, decision := range streamDecision.New {
+		catched := false
 		switch scope := strings.ToUpper(*decision.Scope); scope {
 		case "IP", "RANGE":
 			cfAction := CloudflareActionByDecisionType[*decision.Type]
 			if IPSet, ok := worker.NewIPSet[cfAction]; ok {
-				IPSet[*decision.Value] = struct{}{}
+				ip := normalizeIP(*decision.Value)
+				IPSet[ip] = struct{}{}
 			}
+			catched = true
 		case "COUNTRY":
+			catched = true
 			worker.NewCountryDecisions = append(worker.NewCountryDecisions, decision)
 
 		case "AS":
+			catched = true
 			worker.NewASDecisions = append(worker.NewASDecisions, decision)
-
 		}
+		if catched {
+			worker.Logger.Debugf("received new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
+		} else {
+			// TODO: once we start explictly specifying the decisions we're interested in, this won't be needed
+			worker.Logger.Debugf("ignored new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
+		}
+
 	}
+
 	for _, decision := range streamDecision.Deleted {
+		catched := false
 		switch scope := strings.ToUpper(*decision.Scope); scope {
 		case "IP", "RANGE":
 			cfAction := CloudflareActionByDecisionType[*decision.Type]
 			if IPSet, ok := worker.ExpiredIPSet[cfAction]; ok {
-				IPSet[*decision.Value] = struct{}{}
+				ip := normalizeIP(*decision.Value)
+				IPSet[ip] = struct{}{}
 			}
+			catched = true
 
 		case "COUNTRY":
 			worker.ExpiredCountryDecisions = append(worker.ExpiredCountryDecisions, decision)
+			catched = true
 
 		case "AS":
 			worker.ExpiredASDecisions = append(worker.ExpiredASDecisions, decision)
+			catched = true
+		}
+		if catched {
+			worker.Logger.Debugf("received expired decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
+		} else {
+			worker.Logger.Debugf("ignored expired decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
 		}
 	}
 
@@ -543,68 +606,71 @@ func (worker *CloudflareWorker) Run() error {
 		worker.Logger.Error(err.Error())
 		return err
 	}
-
-	worker.Logger.Debug("setup of API complete")
-	err = worker.setUpIPList()
-
-	if err != nil {
-		worker.Logger.Errorf("error %s in creating IP List", err.Error())
-		return err
-	}
-
-	worker.Logger.Debug("ip list setup complete")
-	err = worker.SetUpRules()
-	if err != nil {
-		worker.Logger.Error(err.Error())
-		return err
-	}
-
+	worker.Logger.Info("waiting for other workers")
+	worker.Wg.Wait()
 	ticker := time.NewTicker(worker.UpdateFrequency)
 	for {
 		select {
 		case <-ticker.C:
 			// TODO: all of the below functions can be grouped and ran in separate goroutines for better performance
+
+			worker.Logger.Debug("processing expired IP  decisions")
 			err := worker.DeleteIPs()
 			if err != nil {
 				return err
 			}
 
+			worker.Logger.Debug("processing new IP decisions")
 			err = worker.AddNewIPs()
 			if err != nil {
 				return err
 			}
 
 			if len(worker.ExpiredCountryDecisions) > 1 {
+				worker.Logger.Debug("processing expired country decisions")
 				err = worker.DeleteCountryBans()
 				if err != nil {
 					return err
 				}
+			} else {
+				worker.Logger.Debug("no expired country decisions")
 			}
 
 			if len(worker.NewCountryDecisions) > 0 {
+				worker.Logger.Debug("processing new country decisions")
 				err = worker.SendCountryBans()
 				if err != nil {
 					return err
 				}
+			} else {
+				worker.Logger.Debug("no new country decisions")
 			}
 
 			if len(worker.ExpiredASDecisions) > 0 {
+				worker.Logger.Debug("processing expired AS decisions")
 				err = worker.DeleteASBans()
 				if err != nil {
 					return err
 				}
+			} else {
+				worker.Logger.Debug("no expired AS decisions")
 			}
 
 			if len(worker.NewASDecisions) > 0 {
+				worker.Logger.Debug("processing new AS decisions")
 				err = worker.SendASBans()
 				if err != nil {
 					return err
 				}
+
+			} else {
+				worker.Logger.Debug("no new AS decisions")
 			}
 
 		case decisions := <-worker.LAPIStream:
-			worker.Logger.Info("processing new and deleted decisions from crowdsec LAPI")
+			worker.Logger.Info("collecting decisions from LAPI")
 			worker.CollectLAPIStream(decisions)
+
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -37,21 +38,25 @@ func HandleSignals(ctx context.Context) {
 }
 
 func workerDeaths(workerTombs []*tomb.Tomb) {
+	ticker := time.NewTicker(time.Second)
 	for {
-		workerDied := false
-		for _, tomb := range workerTombs {
-			if !tomb.Alive() {
-				log.Error(tomb.Err())
-				workerDied = true
-				break
-			}
-		}
-		// if any  worker dies, kill all the rest of the workers
-		if workerDied {
+		select {
+		case <-ticker.C:
+			workerDied := false
 			for _, tomb := range workerTombs {
-				tomb.Kill(errors.New("peer worker died"))
+				if !tomb.Alive() {
+					log.Error(tomb.Err())
+					workerDied = true
+					break
+				}
 			}
-			return
+			// if any  worker dies, kill all the rest of the workers
+			if workerDied {
+				for _, tomb := range workerTombs {
+					tomb.Kill(errors.New("peer worker died"))
+				}
+				return
+			}
 		}
 
 	}
@@ -63,13 +68,18 @@ func main() {
 	// By using channels, after every nth second feed the decisions to each cf routine.
 	// Each cf routine maintains it's own IP list and cache.
 
+	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
 	configPath := flag.String("c", "", "path to config file")
 	flag.Parse()
 
+	if configTokens != nil && *configTokens != "" {
+		ConfigTokens(*configTokens)
+		return
+	}
 	if configPath == nil || *configPath == "" {
 		log.Fatalf("config file required")
-
 	}
+
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
 	if err != nil {
@@ -86,8 +96,6 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 
-	go csLapi.Run()
-
 	t.Go(func() error {
 		zoneLocks := make([]ZoneLock, 0)
 		for _, account := range conf.CloudflareConfig.Accounts {
@@ -100,16 +108,19 @@ func main() {
 		lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 		workerTombs := make([]*tomb.Tomb, 0)
 		var lapiStreamTombs []*tomb.Tomb
+		var wg sync.WaitGroup
 
 		for _, account := range conf.CloudflareConfig.Accounts {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
 			lapiStreams = append(lapiStreams, lapiStream)
+			wg.Add(1)
 			worker := CloudflareWorker{
 				Account:         account,
 				Ctx:             ctx,
 				ZoneLocks:       zoneLocks,
 				LAPIStream:      lapiStream,
 				UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
+				Wg:              &wg,
 			}
 			var workerTomb tomb.Tomb
 			workerTomb.Go(func() error {
@@ -124,7 +135,8 @@ func main() {
 			workerDeaths(workerTombs)
 			return nil
 		})
-
+		wg.Wait()
+		go csLapi.Run()
 		for {
 			select {
 			case decisions := <-csLapi.Stream:
