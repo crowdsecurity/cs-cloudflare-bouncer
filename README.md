@@ -80,14 +80,19 @@ For obtaining the `token`:
 2. Go to [Tokens](https://dash.cloudflare.com/profile/api-tokens) and create the token. The bouncer requires the follwing permissions to function.
 ![image](https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/token_permissions.png)
 
-For obtaining the account `id`, and `zone_id`:
+For automatically generating config for tokens, run the following command
+```
+ /usr/local/bin/cs-cloudflare-bouncer -g <TOKEN1>,<TOKEN2>..
+```
+
+Make changes as you like to the generated config. Then copy the output under `cloudflare_config` in your bouncer's config file.
+
+For obtaining the account `id`, and `zone_id` manually:
 
 1. Go to each of the "domain dashboard".
 2. In the bottom left corner you would see the domain's `zone_id` and the owner account's `id`
 
-If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of remediations. For free plan zones only one remdiation is supported. 
-
-The first remdiation is applied as default remediation.
+**Note:** If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of remediations. For free plan zones only one remdiation is supported. The first remdiation is applied as default remediation.
 
 # How it works
 
