@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -117,7 +118,7 @@ var dummyCFAccount CloudflareAccount = CloudflareAccount{
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
 	IPLists: []cloudflare.IPList{{ID: "11", Name: "crowdsec_block", Description: "already"}, {ID: "12", Name: "crowd"}},
 	FirewallRulesList: []cloudflare.FirewallRule{
-		{Filter: cloudflare.Filter{Expression: "ip in $crowdsec"}},
+		{Filter: cloudflare.Filter{Expression: "ip in $crowdsec_block"}},
 		{Filter: cloudflare.Filter{Expression: "ip in $dummy"}}},
 	ZoneList: []cloudflare.Zone{
 		{ID: "zone1"},
@@ -127,13 +128,14 @@ var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
 func TestIPFirewallSetUp(t *testing.T) {
 
 	ctx := context.Background()
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	worker := CloudflareWorker{
 		API:     mockCfAPI,
 		Account: dummyCFAccount,
+		Wg:      &wg,
 	}
 	worker.Init()
-
-	worker.setUpIPList()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
 
 	if err != nil {
@@ -152,11 +154,13 @@ func TestIPFirewallSetUp(t *testing.T) {
 		t.Error(err)
 	}
 	if len(fr) != 2 {
-		t.Errorf("expected only 1 firewall rule  found %d", len(fr))
+		t.Errorf("expected only 2 firewall rule  found %d", len(fr))
 	}
 }
 
 func TestCollectLAPIStream(t *testing.T) {
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	ip1 := "1.2.3.4"
 	ip2 := "1.2.3.5"
 	scope := "ip"
@@ -169,7 +173,7 @@ func TestCollectLAPIStream(t *testing.T) {
 		New:     []*models.Decision{addedDecisions},
 		Deleted: []*models.Decision{deletedDecisions},
 	}
-	worker := CloudflareWorker{Account: dummyCFAccount, API: mockCfAPI}
+	worker := CloudflareWorker{Account: dummyCFAccount, API: mockCfAPI, Wg: &wg}
 	worker.Init()
 	worker.setUpIPList()
 
