@@ -112,7 +112,18 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	return config, nil
 }
 
-func ConfigTokens(tokens string) error {
+func ConfigTokens(tokens string, baseConfigPath string) error {
+	baseConfig := &bouncerConfig{}
+	configBuff, err := ioutil.ReadFile(baseConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s : %v", baseConfigPath, err)
+	}
+
+	err = yaml.Unmarshal(configBuff, &baseConfig)
+	if err != nil {
+		return err
+	}
+
 	accountConfig := make([]CloudflareAccount, 0)
 	zoneByID := make(map[string]cloudflare.Zone)
 	accountByID := make(map[string]cloudflare.Account)
@@ -153,7 +164,8 @@ func ConfigTokens(tokens string) error {
 		}
 	}
 	cfConfig := CloudflareConfig{Accounts: accountConfig, UpdateFrequency: time.Second * 10}
-	data, err := yaml.Marshal(cfConfig)
+	baseConfig.CloudflareConfig = cfConfig
+	data, err := yaml.Marshal(baseConfig)
 	if err != nil {
 		return err
 	}
@@ -169,12 +181,6 @@ func ConfigTokens(tokens string) error {
 		} else {
 			fmt.Println(line)
 		}
-	}
-
-	fmt.Println("--------------------------------")
-	fmt.Println("Paste this under 'cloudflare_config' in bouncer's config file")
-	if err != nil {
-		log.Fatal(err)
 	}
 	return nil
 }
