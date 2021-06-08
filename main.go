@@ -73,7 +73,17 @@ func main() {
 	flag.Parse()
 
 	if configTokens != nil && *configTokens != "" {
-		ConfigTokens(*configTokens)
+		if configPath == nil || *configPath == "" {
+			err := ConfigTokens(*configTokens, "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml")
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			err := ConfigTokens(*configTokens, *configPath)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 		return
 	}
 	if configPath == nil || *configPath == "" {
