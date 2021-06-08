@@ -182,6 +182,8 @@ func (worker *CloudflareWorker) deleteFiltersContainingString(str string, zonesI
 	return nil
 }
 
+//let's try to make the startup lighter : do not delete and recreate everything on startup, but keep stuff in place,
+//and expose a `--cleanup` for example
 func (worker *CloudflareWorker) deleteExistingIPList() error {
 	IPLists, err := worker.API.ListIPLists(worker.Ctx)
 	if err != nil {
@@ -242,6 +244,9 @@ func (worker *CloudflareWorker) getIPListID(IPListName string, IPLists []cloudfl
 	return nil
 }
 
+//maybe we can find a way to make startup lighter :
+// - do not delete the lists if they exist (and match)
+// - expose a method with the binary (ie --cleanup) that cleans up our lists and such
 func (worker *CloudflareWorker) setUpIPList() error {
 	err := worker.deleteExistingIPList()
 	if err != nil {

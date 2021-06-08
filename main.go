@@ -90,6 +90,7 @@ func main() {
 		log.Fatalf("config file required")
 	}
 
+	/*using context WithTimeout() can be useful if we want to track timeout or slow api operations*/
 	ctx := context.Background()
 	conf, err := NewConfig(*configPath)
 	if err != nil {
@@ -106,6 +107,7 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 
+	//not sure this should be in a tomb
 	t.Go(func() error {
 		zoneLocks := make([]ZoneLock, 0)
 		for _, account := range conf.CloudflareConfig.Accounts {
@@ -124,6 +126,7 @@ func main() {
 			lapiStream := make(chan *models.DecisionsStreamResponse)
 			lapiStreams = append(lapiStreams, lapiStream)
 			wg.Add(1)
+			//one worker per account
 			worker := CloudflareWorker{
 				Account:         account,
 				Ctx:             ctx,
@@ -133,6 +136,7 @@ func main() {
 				Wg:              &wg,
 			}
 			var workerTomb tomb.Tomb
+			//this one ok in a tomb
 			workerTomb.Go(func() error {
 				err := worker.Run()
 				return err
@@ -140,12 +144,14 @@ func main() {
 			workerTombs = append(workerTombs, &workerTomb)
 		}
 
+		//we might want to put all the workers on the same tomb : if one dies, all dies
 		var workerHealth tomb.Tomb
 		workerHealth.Go(func() error {
 			workerDeaths(workerTombs)
 			return nil
 		})
 		wg.Wait()
+		//this one might be in a tomb instead of a standalone goroutine
 		go csLapi.Run()
 		for {
 			select {
@@ -155,6 +161,7 @@ func main() {
 				for _, lapiStream := range lapiStreams {
 					lapiStream := lapiStream
 					var lapiStreamTomb tomb.Tomb
+					//why are you doing this into a tomb ? if it hangs, might have a lock somewhere
 					lapiStreamTomb.Go(func() error {
 						lapiStream <- decisions
 						return nil
@@ -162,6 +169,7 @@ func main() {
 					lapiStreamTombs = append(lapiStreamTombs, &lapiStreamTomb)
 				}
 
+			//this is a side effect of the tomb management : those tombs shouldn't exist
 			case <-workerHealth.Dead():
 				// at this point all workers are dead, so kill all the lapiStream routines, since
 				// no worker is listening
