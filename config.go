@@ -15,8 +15,9 @@ import (
 )
 
 type CloudflareZone struct {
-	ID          string   `yaml:"zone_id"`
-	Actions []string `yaml:"remediation,omitempty"`
+	ID        string   `yaml:"zone_id"`
+	Actions   []string `yaml:"remediation,omitempty"`
+	ActionSet map[string]struct{}
 }
 type CloudflareAccount struct {
 	ID           string           `yaml:"id"`
@@ -55,7 +56,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
-	validRemedy := map[string]bool{"challenge": true, "block": true, "js_challenge": true}
+	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true}
 
 	for i, account := range config.CloudflareConfig.Accounts {
 		if _, ok := accountIDSet[account.ID]; ok {
@@ -70,14 +71,16 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			config.CloudflareConfig.Accounts[i].IPListPrefix = "crowdsec"
 		}
 
-		for i, zone := range account.Zones {
+		for j, zone := range account.Zones {
+			config.CloudflareConfig.Accounts[i].Zones[j].ActionSet = map[string]struct{}{}
 			if len(zone.Actions) == 0 {
-				account.Zones[i].Actions = []string{"challenge"}
+				account.Zones[j].Actions = []string{"challenge"}
 			}
-			for _, r := range zone.Actions {
-				if _, ok := validRemedy[r]; !ok {
-					return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", r)
+			for _, a := range zone.Actions {
+				if _, ok := validAction[a]; !ok {
+					return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", a)
 				}
+				config.CloudflareConfig.Accounts[i].Zones[j].ActionSet[a] = struct{}{}
 			}
 
 			if _, ok := zoneIdSet[zone.ID]; ok {
@@ -156,7 +159,7 @@ func ConfigTokens(tokens string, baseConfigPath string) error {
 				zoneByID[zone.ID] = zone
 				if zone.Account.ID == account.ID {
 					accountConfig[i].Zones = append(accountConfig[i].Zones, CloudflareZone{
-						ID:          zone.ID,
+						ID:      zone.ID,
 						Actions: []string{"challenge"},
 					})
 				}

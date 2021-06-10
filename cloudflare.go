@@ -345,7 +345,7 @@ func (worker *CloudflareWorker) SetUpRules() error {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for _, action := range zone.Actions {
 			ruleExpression := worker.CloudflareStateByAction[action].currExpr
-			firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: ruleExpression}, Action: action, Description: fmt.Sprintf("%s if in CrowdSec IP list", zone.Actions)}}
+			firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: ruleExpression}, Action: action, Description: fmt.Sprintf("CrowdSec %s rule", action)}}
 			rule, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, firewallRules)
 			if err != nil {
 				worker.Logger.WithFields(log.Fields{"zone_id": zone.ID}).Errorf("error %s in creating firewall rule %s", err.Error(), ruleExpression)
@@ -542,7 +542,10 @@ func (worker *CloudflareWorker) SendASBans() error {
 	for _, zone := range worker.Account.Zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for action, decisions := range decisionsByAction {
-			if action == "defaulted" {
+			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
+				if action != "defaulted" {
+					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
+				}
 				action = zone.Actions[0]
 			}
 			for _, decision := range decisions {
@@ -562,7 +565,10 @@ func (worker *CloudflareWorker) DeleteASBans() error {
 	for _, zone := range worker.Account.Zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for action, decisions := range decisionsByAction {
-			if action == "defaulted" {
+			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
+				if action != "defaulted" {
+					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
+				}
 				action = zone.Actions[0]
 			}
 			for _, decision := range decisions {
@@ -582,12 +588,15 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 	for _, zone := range worker.Account.Zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for action, decisions := range decisionsByAction {
-			if action == "defaulted" {
+			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
+				if action != "defaulted" {
+					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
+				}
 				action = zone.Actions[0]
 			}
 			for _, decision := range decisions {
 				if _, ok := worker.CloudflareStateByAction[action].countrySet[*decision.Value]; !ok {
-					zoneLogger.Debugf("found new AS ban for %s", *decision.Value)
+					zoneLogger.Debugf("found new countrys ban for %s", *decision.Value)
 					worker.CloudflareStateByAction[action].countrySet[*decision.Value] = struct{}{}
 				}
 			}
@@ -602,12 +611,15 @@ func (worker *CloudflareWorker) DeleteCountryBans() error {
 	for _, zone := range worker.Account.Zones {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for action, decisions := range decisionsByAction {
-			if action == "defaulted" {
+			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
+				if action != "defaulted" {
+					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
+				}
 				action = zone.Actions[0]
 			}
 			for _, decision := range decisions {
 				if _, ok := worker.CloudflareStateByAction[action].countrySet[*decision.Value]; ok {
-					zoneLogger.Debugf("found expired AS ban for %s", *decision.Value)
+					zoneLogger.Debugf("found expired country ban for %s", *decision.Value)
 					delete(worker.CloudflareStateByAction[action].countrySet, *decision.Value)
 				}
 			}
@@ -617,27 +629,28 @@ func (worker *CloudflareWorker) DeleteCountryBans() error {
 	return nil
 }
 func (worker *CloudflareWorker) UpdateRules() error {
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
-		updatedFilters := make([]cloudflare.Filter, 0)
-		for action, state := range worker.CloudflareStateByAction {
-			for _, zaction := range zone.Actions {
-				// check whether this action is supported by this zone
-				if action == zaction {
-					if worker.CloudflareStateByAction[action].UpdateExpr() {
-						updatedFilters = append(updatedFilters, cloudflare.Filter{ID: state.filterIDByZoneID[zone.ID], Expression: state.currExpr})
-					}
-				}
-			}
+	for action, state := range worker.CloudflareStateByAction {
+		if !worker.CloudflareStateByAction[action].UpdateExpr() {
+			// expression is still same, why bother.
+			worker.Logger.Debugf("rule for %s action is unchanged", action)
+			continue
 		}
-		if len(updatedFilters) > 0 {
-			zoneLogger.Debugf("updating %d rules", len(updatedFilters))
-			_, err := worker.API.UpdateFilters(worker.Ctx, zone.ID, updatedFilters)
-			if err != nil {
-				return err
+		for _, zone := range worker.Account.Zones {
+			zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+			updatedFilters := make([]cloudflare.Filter, 0)
+			if _, ok := zone.ActionSet[action]; ok {
+				// check whether this action is supported by this zone
+				updatedFilters = append(updatedFilters, cloudflare.Filter{ID: state.filterIDByZoneID[zone.ID], Expression: state.currExpr})
 			}
-		} else {
-			zoneLogger.Debug("rules are same")
+			if len(updatedFilters) > 0 {
+				zoneLogger.Debugf("updating %d rules", len(updatedFilters))
+				_, err := worker.API.UpdateFilters(worker.Ctx, zone.ID, updatedFilters)
+				if err != nil {
+					return err
+				}
+			} else {
+				zoneLogger.Debug("rules are same")
+			}
 		}
 	}
 	return nil

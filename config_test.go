@@ -31,8 +31,11 @@ func TestNewConfig(t *testing.T) {
 							ID: "${CF_ACC_ID}",
 							Zones: []CloudflareZone{
 								{
-									ID:          "${CF_ZONE_ID}",
+									ID:      "${CF_ZONE_ID}",
 									Actions: []string{"block"},
+									ActionSet: map[string]struct{}{
+										"block": struct{}{},
+									},
 								},
 							},
 							Token:        "${CF_TOKEN}",
@@ -65,11 +68,11 @@ func TestNewConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := NewConfig(tt.args.configPath)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewConfig() error = %+v, wantErr %+v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewConfig() = %v, want %v", got, tt.want)
+				t.Errorf("NewConfig() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
