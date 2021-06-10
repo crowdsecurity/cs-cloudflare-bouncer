@@ -17,7 +17,7 @@ import (
 type CloudflareZone struct {
 	ID        string   `yaml:"zone_id"`
 	Actions   []string `yaml:"remediation,omitempty"`
-	ActionSet map[string]struct{}
+	ActionSet map[string]struct{} `yaml:",omitempty"`
 }
 type CloudflareAccount struct {
 	ID           string           `yaml:"id"`
