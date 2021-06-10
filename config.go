@@ -16,7 +16,7 @@ import (
 
 type CloudflareZone struct {
 	ID          string   `yaml:"zone_id"`
-	Remediation []string `yaml:"remediation,omitempty"`
+	Actions []string `yaml:"remediation,omitempty"`
 }
 type CloudflareAccount struct {
 	ID           string           `yaml:"id"`
@@ -71,10 +71,10 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		}
 
 		for i, zone := range account.Zones {
-			if len(zone.Remediation) == 0 {
-				account.Zones[i].Remediation = []string{"challenge"}
+			if len(zone.Actions) == 0 {
+				account.Zones[i].Actions = []string{"challenge"}
 			}
-			for _, r := range zone.Remediation {
+			for _, r := range zone.Actions {
 				if _, ok := validRemedy[r]; !ok {
 					return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", r)
 				}
@@ -157,7 +157,7 @@ func ConfigTokens(tokens string, baseConfigPath string) error {
 				if zone.Account.ID == account.ID {
 					accountConfig[i].Zones = append(accountConfig[i].Zones, CloudflareZone{
 						ID:          zone.ID,
-						Remediation: []string{"challenge"},
+						Actions: []string{"challenge"},
 					})
 				}
 			}

@@ -86,6 +86,10 @@ func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string
 	return nil
 }
 
+func (cfAPI *mockCloudflareAPI) UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error) {
+	return make([]cloudflare.Filter, 0), nil
+}
+
 func (cfAPI *mockCloudflareAPI) FirewallRules(ctx context.Context, zone string, opts cloudflare.PaginationOptions) ([]cloudflare.FirewallRule, error) {
 	return cfAPI.FirewallRulesList, nil
 }
@@ -108,8 +112,8 @@ var dummyCFAccount CloudflareAccount = CloudflareAccount{
 	ID: "dummyID",
 	Zones: []CloudflareZone{
 		{
-			ID:          "zone1",
-			Remediation: []string{"block"},
+			ID:      "zone1",
+			Actions: []string{"block"},
 		},
 	},
 	IPListPrefix: "crowdsec",
@@ -178,11 +182,115 @@ func TestCollectLAPIStream(t *testing.T) {
 	worker.setUpIPList()
 
 	worker.CollectLAPIStream(dummyResponse)
-	if len(worker.NewIPSet["block"]) != 1 {
-		t.Errorf("expected 1 key in 'NewIPSet' but found %d", len(worker.NewIPSet["block"]))
+	if len(worker.NewIPDecisions) != 1 {
+		t.Errorf("expected 1 key in 'NewIPSet' but found %d", len(worker.NewIPDecisions))
 	}
 
-	if len(worker.ExpiredIPSet["block"]) != 1 {
-		t.Errorf("expected 1 key in 'ExpiredIPSet' but found %d", len(worker.ExpiredIPSet["block"]))
+	if len(worker.ExpiredIPDecisions) != 1 {
+		t.Errorf("expected 1 key in 'ExpiredIPSet' but found %d", len(worker.ExpiredIPDecisions))
+	}
+}
+
+func Test_setToExprList(t *testing.T) {
+	type args struct {
+		set    map[string]struct{}
+		quotes bool
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "unquoted",
+			args: args{
+				set: map[string]struct{}{
+					"1.2.3.4": struct{}{},
+					"6.7.8.9": struct{}{},
+				},
+				quotes: false,
+			},
+			want: `{1.2.3.4 6.7.8.9}`,
+		},
+		{
+			name: "quoted",
+			args: args{
+				set: map[string]struct{}{
+					"US": struct{}{},
+					"UK": struct{}{},
+				},
+				quotes: true,
+			},
+			want: `{"UK" "US"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := setToExprList(tt.args.set, tt.args.quotes); got != tt.want {
+				t.Errorf("setToExprList() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudflareState_computeExpression(t *testing.T) {
+	type fields struct {
+		ipListState         IPListState
+		action              string
+		countrySet          map[string]struct{}
+		autonomousSystemSet map[string]struct{}
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		{
+			name:   "all null",
+			fields: fields{},
+			want:   "",
+		},
+		{
+			name: "only country",
+			fields: fields{countrySet: map[string]struct{}{
+				"US": struct{}{},
+				"UK": struct{}{},
+			}},
+			want: `(ip.geoip.country in {"UK" "US"})`,
+		},
+		{
+			name:   "only ip list",
+			fields: fields{ipListState: IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}}},
+			want:   `(ip.src in $crowdsec_block)`,
+		},
+		{
+			name: "ip list + as ban",
+			fields: fields{
+				ipListState:         IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}},
+				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
+			},
+			want: `(ip.geoip.asnum in {1234 5432}) or (ip.src in $crowdsec_block)`,
+		},
+		{
+			name: "ip list + as ban + country",
+			fields: fields{
+				ipListState:         IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}},
+				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
+				countrySet:          map[string]struct{}{"US": struct{}{}, "UK": struct{}{}},
+			},
+			want: `(ip.geoip.country in {"UK" "US"}) or (ip.geoip.asnum in {1234 5432}) or (ip.src in $crowdsec_block)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfState := &CloudflareState{
+				ipListState:         tt.fields.ipListState,
+				countrySet:          tt.fields.countrySet,
+				autonomousSystemSet: tt.fields.autonomousSystemSet,
+			}
+			if got := cfState.computeExpression(); got != tt.want {
+				t.Errorf("CloudflareState.computeExpression() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

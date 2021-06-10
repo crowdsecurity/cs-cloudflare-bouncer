@@ -32,7 +32,7 @@ func TestNewConfig(t *testing.T) {
 							Zones: []CloudflareZone{
 								{
 									ID:          "${CF_ZONE_ID}",
-									Remediation: []string{"block"},
+									Actions: []string{"block"},
 								},
 							},
 							Token:        "${CF_TOKEN}",
