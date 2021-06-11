@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -290,6 +291,81 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 			}
 			if got := cfState.computeExpression(); got != tt.want {
 				t.Errorf("CloudflareState.computeExpression() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_classifyDecisionsByAction(t *testing.T) {
+	ip1 := "1.2.3.4"
+	ip2 := "1.2.3.5"
+
+	captcha := "captcha"
+	ban := "ban"
+	random := "random"
+
+	decision1 := models.Decision{Value: &ip1, Type: &ban}
+	decision2 := models.Decision{Value: &ip2, Type: &captcha}
+	decision2dup := models.Decision{Value: &ip2, Type: &ban}
+	decisionUnsup := models.Decision{Value: &ip2, Type: &random}
+
+	type args struct {
+		decisions []*models.Decision
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string][]*models.Decision
+	}{
+		{
+			name: "all supported, no dups",
+			args: args{decisions: []*models.Decision{&decision1, &decision2}},
+			want: map[string][]*models.Decision{
+				"defaulted": []*models.Decision{},
+				"block": []*models.Decision{
+					&decision1,
+				},
+				"challenge": []*models.Decision{
+					&decision2,
+				},
+			},
+		},
+		{
+			name: "with dups, all supported",
+			args: args{decisions: []*models.Decision{&decision2, &decision2dup}},
+			want: map[string][]*models.Decision{
+				"defaulted": []*models.Decision{},
+				"challenge": []*models.Decision{&decision2},
+			},
+		},
+		{
+			name: "unsupported, no dups",
+			args: args{decisions: []*models.Decision{&decision1, &decisionUnsup}},
+			want: map[string][]*models.Decision{
+				"defaulted": []*models.Decision{
+					&decisionUnsup,
+				},
+				"block": []*models.Decision{
+					&decision1,
+				},
+			},
+		},
+		{
+			name: "unsupported with dups",
+			args: args{
+				decisions: []*models.Decision{&decisionUnsup, &decision1, &decision2},
+			},
+			want: map[string][]*models.Decision{
+				"defaulted": []*models.Decision{},
+				"block":     []*models.Decision{&decision1},
+				"challenge": []*models.Decision{&decision2},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyDecisionsByAction(tt.args.decisions); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("classifyDecisionsByAction() = %v, want %v", got, tt.want)
 			}
 		})
 	}

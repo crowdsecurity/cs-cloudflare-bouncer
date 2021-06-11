@@ -63,7 +63,7 @@ func dumpStates(states *[]CloudflareState) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(cachePath, data, 0644)
+	err = os.WriteFile(cachePath, data, 0777)
 	if err != nil {
 		return err
 	}
@@ -140,8 +140,9 @@ func main() {
 		states := make(map[string]*CloudflareState)
 		for _, s := range workerStates {
 			//TODO  search can be avoided by having a map by account id
+			tmp := s
 			if s.AccountID == account.ID {
-				states[s.Action] = &s
+				states[s.Action] = &tmp
 			}
 		}
 
@@ -179,7 +180,6 @@ func main() {
 				for i, state := range workerStates {
 					for _, receivedState := range stateByAction {
 						if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
-							log.Debug("updated worker states")
 							workerStates[i] = *receivedState
 							found = true
 						}
@@ -191,6 +191,7 @@ func main() {
 					}
 				}
 				err := dumpStates(&workerStates)
+				log.Debug("updated cache")
 				if err != nil {
 					return err
 				}
