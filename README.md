@@ -56,7 +56,7 @@ cloudflare_config:
     token: 
     ip_list_prefix: crowdsec
     zones:
-    - remediation: 
+    - actions: 
       - challenge # valid choices are either of challenge, js_challenge, block
       zone_id: 
 
@@ -92,7 +92,7 @@ For obtaining the account `id`, and `zone_id` manually:
 1. Go to each of the "domain dashboard".
 2. In the bottom left corner you would see the domain's `zone_id` and the owner account's `id`
 
-**Note:** If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of remediations. For free plan zones only one remdiation is supported. The first remdiation is applied as default remediation.
+**Note:** If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of actionss. For free plan zones only one remdiation is supported. The first remdiation is applied as default actions.
 
 # How it works
 

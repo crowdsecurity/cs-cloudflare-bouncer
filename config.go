@@ -15,15 +15,16 @@ import (
 )
 
 type CloudflareZone struct {
-	ID        string   `yaml:"zone_id"`
-	Actions   []string `yaml:"remediation,omitempty"`
+	ID        string              `yaml:"zone_id"`
+	Actions   []string            `yaml:"actions,omitempty"`
 	ActionSet map[string]struct{} `yaml:",omitempty"`
 }
 type CloudflareAccount struct {
-	ID           string           `yaml:"id"`
-	Zones        []CloudflareZone `yaml:"zones"`
-	Token        string           `yaml:"token"`
-	IPListPrefix string           `yaml:"ip_list_prefix"`
+	ID            string           `yaml:"id"`
+	Zones         []CloudflareZone `yaml:"zones"`
+	Token         string           `yaml:"token"`
+	IPListPrefix  string           `yaml:"ip_list_prefix"`
+	DefaultAction string           `yaml:"default_action"`
 }
 type CloudflareConfig struct {
 	Accounts        []CloudflareAccount `yaml:"accounts"`
@@ -78,7 +79,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			}
 			for _, a := range zone.Actions {
 				if _, ok := validAction[a]; !ok {
-					return nil, fmt.Errorf("invalid remediation '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", a)
+					return nil, fmt.Errorf("invalid actions '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", a)
 				}
 				config.CloudflareConfig.Accounts[i].Zones[j].ActionSet[a] = struct{}{}
 			}

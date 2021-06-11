@@ -9,10 +9,12 @@ cloudflare_config:
   - id: 
     token: 
     ip_list_prefix: crowdsec
+    default_action: challenge
     zones:
-    - remediation: 
+    - actions: 
       - challenge # valid choices are either of challenge, js_challenge, block
-      zone_id: 
+      zone_id:
+    
 
   update_frequency: 30s # the frequency to update the cloudflare IP list 
 

@@ -260,13 +260,13 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 		},
 		{
 			name:   "only ip list",
-			fields: fields{ipListState: IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}}},
+			fields: fields{ipListState: IPListState{IPList: &cloudflare.IPList{Name: "crowdsec_block"}}},
 			want:   `(ip.src in $crowdsec_block)`,
 		},
 		{
 			name: "ip list + as ban",
 			fields: fields{
-				ipListState:         IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}},
+				ipListState:         IPListState{IPList: &cloudflare.IPList{Name: "crowdsec_block"}},
 				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
 			},
 			want: `(ip.geoip.asnum in {1234 5432}) or (ip.src in $crowdsec_block)`,
@@ -274,7 +274,7 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 		{
 			name: "ip list + as ban + country",
 			fields: fields{
-				ipListState:         IPListState{ipList: &cloudflare.IPList{Name: "crowdsec_block"}},
+				ipListState:         IPListState{IPList: &cloudflare.IPList{Name: "crowdsec_block"}},
 				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
 				countrySet:          map[string]struct{}{"US": struct{}{}, "UK": struct{}{}},
 			},
@@ -284,9 +284,9 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfState := &CloudflareState{
-				ipListState:         tt.fields.ipListState,
-				countrySet:          tt.fields.countrySet,
-				autonomousSystemSet: tt.fields.autonomousSystemSet,
+				IPListState:         tt.fields.ipListState,
+				CountrySet:          tt.fields.countrySet,
+				AutonomousSystemSet: tt.fields.autonomousSystemSet,
 			}
 			if got := cfState.computeExpression(); got != tt.want {
 				t.Errorf("CloudflareState.computeExpression() = %v, want %v", got, tt.want)
