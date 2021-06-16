@@ -297,22 +297,23 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 
 func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) error {
 	zones, err := worker.API.ListZones(worker.Ctx)
-	zoneIDs := make([]string, len(zones))
-	for i, zone := range zones {
-		zoneIDs[i] = zone.ID
-	}
-	worker.Logger.Debugf("found %d zones on this account", len(zones))
 	if err != nil {
 		return err
 	}
 
-	err = worker.deleteRulesContainingString(fmt.Sprintf("$%s", IPListName), extractZoneIDs(worker.Account.Zones))
+	zoneIDs := make([]string, len(zones))
+	for i, zone := range zones {
+		zoneIDs[i] = zone.ID
+	}
+
+	worker.Logger.Debugf("found %d zones on this account", len(zones))
+	err = worker.deleteRulesContainingString(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
 	}
 	// A Filter can exist on it's own, they are not visible on UI, they are API only.
 	// Clear these Filters.
-	err = worker.deleteFiltersContainingString(fmt.Sprintf("$%s", IPListName), extractZoneIDs(worker.Account.Zones))
+	err = worker.deleteFiltersContainingString(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
 	}
@@ -343,7 +344,6 @@ func (worker *CloudflareWorker) setUpIPList() error {
 		*worker.CloudflareStateByAction[action].IPListState.IPList = tmp
 		worker.CloudflareStateByAction[action].IPListState.ItemByIP = make(map[string]cloudflare.IPListItem)
 		worker.CloudflareStateByAction[action].UpdateExpr()
-		go func() { worker.UpdatedState <- worker.CloudflareStateByAction }()
 
 	}
 	return nil
@@ -459,6 +459,7 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 func (worker *CloudflareWorker) Init() error {
 
 	defer worker.Wg.Done()
+	defer func() { worker.UpdatedState <- worker.CloudflareStateByAction }()
 	var err error
 
 	worker.Logger = log.WithFields(log.Fields{"account_id": worker.Account.ID})
