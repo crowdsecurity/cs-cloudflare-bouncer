@@ -133,13 +133,6 @@ type cloudflareAPI interface {
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
 }
 
-func extractZoneIDs(zones []CloudflareZone) []string {
-	zoneIDs := make([]string, len(zones))
-	for i, zone := range zones {
-		zoneIDs[i] = zone.ID
-	}
-	return zoneIDs
-}
 
 func min(a int, b int) int {
 	if a > b {

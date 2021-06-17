@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"reflect"
+	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
+	log "github.com/sirupsen/logrus"
 )
 
 type mockCloudflareAPI struct {
@@ -140,10 +142,11 @@ func TestIPFirewallSetUp(t *testing.T) {
 		API:          mockCfAPI,
 		Account:      dummyCFAccount,
 		Wg:           &wg,
-		UpdatedState: make(chan map[string]*CloudflareState, 1),
+		UpdatedState: make(chan map[string]*CloudflareState, 2),
 		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
 	}
 	worker.Init()
+	worker.SetUpCloudflare()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
 
 	if err != nil {
@@ -376,6 +379,350 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 			if got := classifyDecisionsByAction(tt.args.decisions); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("classifyDecisionsByAction() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_normalizeIP(t *testing.T) {
+	type args struct {
+		ip string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "simple ipv4",
+			args: args{
+				ip: "1.2.3.4",
+			},
+			want: "1.2.3.4",
+		},
+		{
+			name: "full ipv6 must be shortened to /64 form",
+			args: args{
+				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+			},
+			want: "2001:0db8:85a3:0000::/64",
+		},
+		{
+			name: "full ipv6 in shortform must be converted to subnet form",
+			args: args{
+				ip: "2001::",
+			},
+			want: "2001::/16",
+		},
+		{
+			name: "full ipv6 with cidr should be made to atlease /64 form",
+			args: args{
+				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334/65",
+			},
+			want: "2001:0db8:85a3:0000::/64",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeIP(tt.args.ip); got != tt.want {
+				t.Errorf("normalizeIP() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudflareWorker_SendASBans(t *testing.T) {
+	ASNum1 := "1234"
+	ASNum2 := "1235"
+
+	action := "block"
+	unSupAction := "toto"
+
+	type fields struct {
+		CFStateByAction map[string]*CloudflareState
+		NewASDecisions  []*models.Decision
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []string
+	}{
+		{
+			name: "simple supported decision",
+			fields: fields{
+				NewASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}},
+			},
+			want: []string{"1234"},
+		},
+		{
+			name: "simple supported multiple decisions without duplicates",
+			fields: fields{
+				NewASDecisions: []*models.Decision{
+					{Value: &ASNum1, Type: &action},
+					{Value: &ASNum2, Type: &action},
+				},
+			},
+			want: []string{"1234", "1235"},
+		},
+		{
+			name: "unsupported decision should be defaulted ",
+			fields: fields{
+				NewASDecisions: []*models.Decision{
+					{Value: &ASNum1, Type: &unSupAction},
+				},
+			},
+			want: []string{"1234"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				CFStateByAction: tt.fields.CFStateByAction,
+				NewASDecisions:  tt.fields.NewASDecisions,
+				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
+			}
+			worker.CFStateByAction = make(map[string]*CloudflareState)
+			worker.Account = dummyCFAccount
+			worker.CFStateByAction[action] = &CloudflareState{AutonomousSystemSet: make(map[string]struct{})}
+			err := worker.SendASBans()
+			if err != nil {
+				t.Error(err)
+			}
+			found := make([]string, 0)
+			for f := range worker.CFStateByAction[action].AutonomousSystemSet {
+				found = append(found, f)
+			}
+			sort.Strings(found)
+			sort.Strings(tt.want)
+			if !reflect.DeepEqual(found, tt.want) {
+				t.Errorf("expected=%v found=%v ", tt.want, found)
+			}
+
+		})
+	}
+}
+
+func TestCloudflareWorker_DeleteASBans(t *testing.T) {
+	ASNum1 := "1234"
+	// ASNum2 := "1235"
+
+	action := "block"
+	// unSupAction := "toto"
+
+	type fields struct {
+		CFStateByAction    map[string]*CloudflareState
+		ExpiredASDecisions []*models.Decision
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []string
+	}{
+		{
+			name: "simple delete AS",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						AutonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "1236": struct{}{}},
+					},
+				},
+				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}},
+			},
+			want: []string{"1236"},
+		},
+		{
+			name: "delete something that does not exist",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						AutonomousSystemSet: map[string]struct{}{"1235": struct{}{}},
+					},
+				},
+				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}},
+			},
+			want: []string{"1235"},
+		},
+		{
+			name: "delete something multiple times",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						AutonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "9999": struct{}{}},
+					},
+				},
+				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}, {Value: &ASNum1, Type: &action}, {Value: &ASNum1, Type: &action}},
+			},
+			want: []string{"9999"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				CFStateByAction:    tt.fields.CFStateByAction,
+				ExpiredASDecisions: tt.fields.ExpiredASDecisions,
+				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
+			}
+			worker.Account = dummyCFAccount
+			err := worker.DeleteASBans()
+			if err != nil {
+				t.Error(err)
+			}
+			found := make([]string, 0)
+			for f := range worker.CFStateByAction[action].AutonomousSystemSet {
+				found = append(found, f)
+			}
+			sort.Strings(found)
+			sort.Strings(tt.want)
+			if !reflect.DeepEqual(found, tt.want) {
+				t.Errorf("expected=%v found=%v ", tt.want, found)
+			}
+
+		})
+	}
+}
+
+func TestCloudflareWorker_SendCountryBans(t *testing.T) {
+	Country1 := "IN"
+	Country2 := "CH"
+
+	action := "block"
+	unSupAction := "toto"
+
+	type fields struct {
+		CFStateByAction     map[string]*CloudflareState
+		NewCountryDecisions []*models.Decision
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []string
+	}{
+		{
+			name: "simple supported decision",
+			fields: fields{
+				NewCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}},
+			},
+			want: []string{"IN"},
+		},
+		{
+			name: "simple supported multiple decisions without duplicates",
+			fields: fields{
+				NewCountryDecisions: []*models.Decision{
+					{Value: &Country1, Type: &action},
+					{Value: &Country2, Type: &action},
+				},
+			},
+			want: []string{"IN", "CH"},
+		},
+		{
+			name: "unsupported decision should be defaulted ",
+			fields: fields{
+				NewCountryDecisions: []*models.Decision{
+					{Value: &Country1, Type: &unSupAction},
+				},
+			},
+			want: []string{"IN"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				CFStateByAction:     tt.fields.CFStateByAction,
+				NewCountryDecisions: tt.fields.NewCountryDecisions,
+				Logger:              log.WithFields(log.Fields{"account_id": "test worker"}),
+			}
+			worker.CFStateByAction = make(map[string]*CloudflareState)
+			worker.Account = dummyCFAccount
+			worker.CFStateByAction[action] = &CloudflareState{CountrySet: make(map[string]struct{})}
+			err := worker.SendCountryBans()
+			if err != nil {
+				t.Error(err)
+			}
+			found := make([]string, 0)
+			for f := range worker.CFStateByAction[action].CountrySet {
+				found = append(found, f)
+			}
+			sort.Strings(found)
+			sort.Strings(tt.want)
+			if !reflect.DeepEqual(found, tt.want) {
+				t.Errorf("expected=%v found=%v ", tt.want, found)
+			}
+
+		})
+	}
+}
+
+func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
+	Country1 := "UK"
+	action := "block"
+
+	type fields struct {
+		CFStateByAction         map[string]*CloudflareState
+		ExpiredCountryDecisions []*models.Decision
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []string
+	}{
+		{
+			name: "simple delete AS",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						CountrySet: map[string]struct{}{"UK": struct{}{}, "1236": struct{}{}},
+					},
+				},
+				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}},
+			},
+			want: []string{"1236"},
+		},
+		{
+			name: "delete something that does not exist",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						CountrySet: map[string]struct{}{"1235": struct{}{}},
+					},
+				},
+				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}},
+			},
+			want: []string{"1235"},
+		},
+		{
+			name: "delete something multiple times",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: &CloudflareState{
+						CountrySet: map[string]struct{}{"UK": struct{}{}, "9999": struct{}{}},
+					},
+				},
+				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}},
+			},
+			want: []string{"9999"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				CFStateByAction:         tt.fields.CFStateByAction,
+				ExpiredCountryDecisions: tt.fields.ExpiredCountryDecisions,
+				Logger:                  log.WithFields(log.Fields{"account_id": "test worker"}),
+			}
+			worker.Account = dummyCFAccount
+			err := worker.DeleteCountryBans()
+			if err != nil {
+				t.Error(err)
+			}
+			found := make([]string, 0)
+			for f := range worker.CFStateByAction[action].CountrySet {
+				found = append(found, f)
+			}
+			sort.Strings(found)
+			sort.Strings(tt.want)
+			if !reflect.DeepEqual(found, tt.want) {
+				t.Errorf("expected=%v found=%v ", tt.want, found)
+			}
+
 		})
 	}
 }
