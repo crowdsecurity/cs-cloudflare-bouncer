@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/tomb.v2"
 )
@@ -133,6 +137,15 @@ func main() {
 		}
 	}
 
+	var workerTomb tomb.Tomb
+	var serverTomb tomb.Tomb
+
+	var wg sync.WaitGroup
+	var Count prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cloudflare_api_calls",
+		Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
+	})
+
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 	stateStream := make(chan map[string]*CloudflareState)
@@ -142,10 +155,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	var workerTomb tomb.Tomb
-	var wg sync.WaitGroup
-	var APICallCount int32 = 0
 
 	for _, account := range conf.CloudflareConfig.Accounts {
 		lapiStream := make(chan *models.DecisionsStreamResponse)
@@ -169,7 +178,7 @@ func main() {
 			Wg:              &wg,
 			UpdatedState:    stateStream,
 			CFStateByAction: states,
-			APICallCount:    &APICallCount,
+			Count:           Count,
 		}
 		if *onlySetup {
 			workerTomb.Go(func() error {
@@ -257,6 +266,12 @@ func main() {
 				return err
 			}
 		}
+	})
+
+	serverTomb.Go(func() error {
+		http.Handle("/metrics", promhttp.Handler())
+		err := http.ListenAndServe(":2112", nil)
+		return err
 	})
 
 	if conf.Daemon {

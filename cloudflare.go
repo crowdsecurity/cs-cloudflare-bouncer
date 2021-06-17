@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	"github.com/prometheus/client_golang/prometheus"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -114,7 +115,7 @@ type CloudflareWorker struct {
 	ExpiredCountryDecisions []*models.Decision
 	API                     cloudflareAPI
 	Wg                      *sync.WaitGroup
-	APICallCount            *int32
+	Count                   prometheus.Counter
 }
 
 type cloudflareAPI interface {
@@ -207,7 +208,7 @@ func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, er
 }
 
 func (worker *CloudflareWorker) getAPI() cloudflareAPI {
-	// atomic.AddInt32(worker.APICallCount, 1)
+	worker.Count.Inc()
 	return worker.API
 }
 

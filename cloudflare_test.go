@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type mockCloudflareAPI struct {
@@ -140,6 +141,7 @@ func TestIPFirewallSetUp(t *testing.T) {
 		Account:      dummyCFAccount,
 		Wg:           &wg,
 		UpdatedState: make(chan map[string]*CloudflareState, 1),
+		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
 	}
 	worker.Init()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
@@ -179,7 +181,13 @@ func TestCollectLAPIStream(t *testing.T) {
 		New:     []*models.Decision{addedDecisions},
 		Deleted: []*models.Decision{deletedDecisions},
 	}
-	worker := CloudflareWorker{Account: dummyCFAccount, API: mockCfAPI, Wg: &wg, UpdatedState: make(chan map[string]*CloudflareState, 1)}
+	worker := CloudflareWorker{
+		Account:      dummyCFAccount,
+		API:          mockCfAPI,
+		Wg:           &wg,
+		UpdatedState: make(chan map[string]*CloudflareState, 1),
+		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
+	}
 	worker.Init()
 	worker.setUpIPList()
 
