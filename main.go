@@ -131,6 +131,7 @@ func main() {
 
 	var workerTomb tomb.Tomb
 	var wg sync.WaitGroup
+	var APICallCount int32 = 0
 
 	for _, account := range conf.CloudflareConfig.Accounts {
 		lapiStream := make(chan *models.DecisionsStreamResponse)
@@ -154,6 +155,7 @@ func main() {
 			Wg:                      &wg,
 			UpdatedState:            stateStream,
 			CloudflareStateByAction: states,
+			APICallCount:            &APICallCount,
 		}
 		if *onlySetup {
 			workerTomb.Go(func() error {
