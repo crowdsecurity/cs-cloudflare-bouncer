@@ -58,6 +58,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true}
+	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge'"
 
 	for i, account := range config.CloudflareConfig.Accounts {
 		if _, ok := accountIDSet[account.ID]; ok {
@@ -72,14 +73,21 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			config.CloudflareConfig.Accounts[i].IPListPrefix = "crowdsec"
 		}
 
+		if len(account.DefaultAction) == 0 {
+			return nil, fmt.Errorf("account %s has no default action", account.ID)
+		}
+		if _, ok := validAction[account.DefaultAction]; !ok {
+			return nil, fmt.Errorf("account %s 's default action is invalid. %s ", account.ID, validChoiceMsg)
+		}
+
 		for j, zone := range account.Zones {
 			config.CloudflareConfig.Accounts[i].Zones[j].ActionSet = map[string]struct{}{}
 			if len(zone.Actions) == 0 {
-				account.Zones[j].Actions = []string{"challenge"}
+				return nil, fmt.Errorf("account %s 's zone %s has no action", account.ID, zone.ID)
 			}
 			for _, a := range zone.Actions {
 				if _, ok := validAction[a]; !ok {
-					return nil, fmt.Errorf("invalid actions '%s', valid choices are either of 'block', 'js_challenge', 'challenge'", a)
+					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
 				}
 				config.CloudflareConfig.Accounts[i].Zones[j].ActionSet[a] = struct{}{}
 			}

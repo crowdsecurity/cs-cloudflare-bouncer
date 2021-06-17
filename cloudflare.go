@@ -459,7 +459,8 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 func (worker *CloudflareWorker) Init() error {
 
 	defer worker.Wg.Done()
-	defer func() { worker.UpdatedState <- worker.CloudflareStateByAction }()
+	defer func() { go func() { worker.UpdatedState <- worker.CloudflareStateByAction }() }()
+
 	var err error
 
 	worker.Logger = log.WithFields(log.Fields{"account_id": worker.Account.ID})
@@ -480,6 +481,7 @@ func (worker *CloudflareWorker) Init() error {
 
 	zones, err := worker.API.ListZones(worker.Ctx)
 	if err != nil {
+		worker.Logger.Error(err.Error())
 		return err
 	}
 	zoneByID := make(map[string]cloudflare.Zone)

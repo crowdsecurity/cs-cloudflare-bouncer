@@ -78,28 +78,26 @@ func main() {
 
 	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
 	configPath := flag.String("c", "", "path to config file")
+	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for clouflare and exit")
 	flag.Parse()
 
+	if configPath == nil || *configPath == "" {
+		*configPath = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
+	}
+	conf, err := NewConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if configTokens != nil && *configTokens != "" {
-		if configPath == nil || *configPath == "" {
-			err := ConfigTokens(*configTokens, "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml")
-			if err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			err := ConfigTokens(*configTokens, *configPath)
-			if err != nil {
-				log.Fatal(err)
-			}
+		err := ConfigTokens(*configTokens, *configPath)
+		if err != nil {
+			log.Fatal(err)
 		}
 		return
 	}
-	if configPath == nil || *configPath == "" {
-		log.Fatalf("config file required")
-	}
 
 	ctx := context.Background()
-	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -157,45 +155,66 @@ func main() {
 			UpdatedState:            stateStream,
 			CloudflareStateByAction: states,
 		}
-		workerTomb.Go(func() error {
-			err := worker.Run()
-			return err
-		})
+		if *onlySetup {
+			workerTomb.Go(func() error {
+				worker.CloudflareStateByAction = nil
+				err := worker.Init()
+				workerTomb.Kill(err)
+				stateStream <- nil
+				return err
+			})
+		} else {
+			workerTomb.Go(func() error {
+				err := worker.Run()
+				return err
+			})
+		}
 	}
 	var dispatchTomb tomb.Tomb
+	var stateTomb tomb.Tomb
 
 	dispatchTomb.Go(func() error {
 		wg.Wait()
 		go csLapi.Run()
 		for {
-			select {
-			case decisions := <-csLapi.Stream:
-				// broadcast decision to each worker
-				for _, lapiStream := range lapiStreams {
-					lapiStream <- decisions
-				}
+			decisions := <-csLapi.Stream
+			// broadcast decision to each worker
+			for _, lapiStream := range lapiStreams {
+				lapiStream <- decisions
+			}
+		}
+	})
 
-			case stateByAction := <-stateStream:
-				found := false
-				for i, state := range workerStates {
-					for _, receivedState := range stateByAction {
-						if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
-							workerStates[i] = *receivedState
-							found = true
-						}
-					}
-				}
-				if !found {
-					for _, receivedState := range stateByAction {
-						workerStates = append(workerStates, *receivedState)
-					}
-				}
-				err := dumpStates(&workerStates)
-				log.Debug("updated cache")
-				if err != nil {
+	stateTomb.Go(func() error {
+		aliveWorkerCount := len(conf.CloudflareConfig.Accounts)
+		for {
+			stateByAction := <-stateStream
+			if stateByAction == nil {
+				aliveWorkerCount--
+				if aliveWorkerCount == 0 {
+					err := stateTomb.Killf("all workers are dead")
 					return err
 				}
-
+			}
+			found := false
+			for i, state := range workerStates {
+				for _, receivedState := range stateByAction {
+					if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
+						workerStates[i] = *receivedState
+						found = true
+					}
+				}
+			}
+			if !found {
+				for _, receivedState := range stateByAction {
+					workerStates = append(workerStates, *receivedState)
+				}
+			}
+			err := dumpStates(&workerStates)
+			log.Debug("updated cache")
+			if err != nil {
+				log.Error(err)
+				return err
 			}
 		}
 	})
@@ -212,10 +231,20 @@ func main() {
 		select {
 		case <-workerTomb.Dying():
 			dispatchTomb.Kill(nil)
-			log.Fatal("at least one of the workers is dying, shutdown")
+			if *onlySetup {
+				stateTomb.Wait()
+				log.Info("setup complete")
+				return
+			}
 		case <-dispatchTomb.Dying():
 			workerTomb.Kill(nil)
+			stateTomb.Kill(nil)
 			log.Fatal("dispatch is dying")
+
+		case <-stateTomb.Dying():
+			workerTomb.Kill(nil)
+			dispatchTomb.Kill(nil)
+			log.Fatal("state routine is dying")
 		}
 	}
 
