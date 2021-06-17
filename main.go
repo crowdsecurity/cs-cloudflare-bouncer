@@ -63,11 +63,19 @@ func dumpStates(states *[]CloudflareState) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(cachePath, data, 0777)
+	err = os.WriteFile(cachePath, data, 0666)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func deleteCacheIfExists() error {
+	var err error
+	if _, err = os.Stat(cachePath); err == nil {
+		err = os.Remove(cachePath)
+	}
+	return err
 }
 
 func main() {
@@ -78,8 +86,14 @@ func main() {
 
 	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
 	configPath := flag.String("c", "", "path to config file")
-	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for clouflare and exit")
+	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
+	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
+
 	flag.Parse()
+
+	if *delete && *onlySetup {
+		log.Fatal("conflicting cli arguements, pass only one of '-d' or '-s' ")
+	}
 
 	if configPath == nil || *configPath == "" {
 		*configPath = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
@@ -147,23 +161,47 @@ func main() {
 
 		wg.Add(1)
 		worker := CloudflareWorker{
-			Account:                 account,
-			Ctx:                     ctx,
-			ZoneLocks:               zoneLocks,
-			LAPIStream:              lapiStream,
-			UpdateFrequency:         conf.CloudflareConfig.UpdateFrequency,
-			Wg:                      &wg,
-			UpdatedState:            stateStream,
-			CloudflareStateByAction: states,
-			APICallCount:            &APICallCount,
+			Account:         account,
+			Ctx:             ctx,
+			ZoneLocks:       zoneLocks,
+			LAPIStream:      lapiStream,
+			UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
+			Wg:              &wg,
+			UpdatedState:    stateStream,
+			CFStateByAction: states,
+			APICallCount:    &APICallCount,
 		}
 		if *onlySetup {
 			workerTomb.Go(func() error {
-				worker.CloudflareStateByAction = nil
-				err := worker.Init()
-				workerTomb.Kill(err)
-				stateStream <- nil
+				var err error = nil
+				defer func() {
+					workerTomb.Kill(err)
+					stateStream <- nil
+				}()
+
+				worker.CFStateByAction = nil
+				err = worker.Init()
+				if err != nil {
+					return err
+				}
+				err = worker.SetUpCloudflare()
 				return err
+
+			})
+		} else if *delete {
+			workerTomb.Go(func() error {
+				var err error = nil
+				defer func() {
+					workerTomb.Kill(err)
+					stateStream <- nil
+				}()
+				err = worker.Init()
+				if err != nil {
+					return nil
+				}
+				err = worker.deleteExistingIPList()
+				return err
+
 			})
 		} else {
 			workerTomb.Go(func() error {
@@ -233,11 +271,25 @@ func main() {
 		select {
 		case <-workerTomb.Dying():
 			dispatchTomb.Kill(nil)
-			if *onlySetup {
-				stateTomb.Wait()
-				log.Info("setup complete")
-				return
+			err := workerTomb.Err()
+			if err != nil {
+				log.Fatal(err)
 			}
+			if *onlySetup || *delete {
+				stateTomb.Wait()
+				if *delete {
+					err = deleteCacheIfExists()
+					if err != nil {
+						log.Errorf("while deleting cache got %s", err.Error())
+					}
+					log.Info("deleted all cf config")
+
+				} else {
+					log.Info("setup complete")
+				}
+			}
+			stateTomb.Kill(nil)
+			return
 		case <-dispatchTomb.Dying():
 			workerTomb.Kill(nil)
 			stateTomb.Kill(nil)

@@ -136,9 +136,10 @@ func TestIPFirewallSetUp(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	worker := CloudflareWorker{
-		API:     mockCfAPI,
-		Account: dummyCFAccount,
-		Wg:      &wg,
+		API:          mockCfAPI,
+		Account:      dummyCFAccount,
+		Wg:           &wg,
+		UpdatedState: make(chan map[string]*CloudflareState, 1),
 	}
 	worker.Init()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
@@ -178,7 +179,7 @@ func TestCollectLAPIStream(t *testing.T) {
 		New:     []*models.Decision{addedDecisions},
 		Deleted: []*models.Decision{deletedDecisions},
 	}
-	worker := CloudflareWorker{Account: dummyCFAccount, API: mockCfAPI, Wg: &wg}
+	worker := CloudflareWorker{Account: dummyCFAccount, API: mockCfAPI, Wg: &wg, UpdatedState: make(chan map[string]*CloudflareState, 1)}
 	worker.Init()
 	worker.setUpIPList()
 
