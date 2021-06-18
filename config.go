@@ -14,20 +14,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type CloudflareZone struct {
+type ZoneConfig struct {
 	ID        string              `yaml:"zone_id"`
 	Actions   []string            `yaml:"actions,omitempty"`
 	ActionSet map[string]struct{} `yaml:",omitempty"`
 }
-type CloudflareAccount struct {
+type AccountConfig struct {
 	ID            string           `yaml:"id"`
-	Zones         []CloudflareZone `yaml:"zones"`
+	Zones         []ZoneConfig `yaml:"zones"`
 	Token         string           `yaml:"token"`
 	IPListPrefix  string           `yaml:"ip_list_prefix"`
 	DefaultAction string           `yaml:"default_action"`
 }
 type CloudflareConfig struct {
-	Accounts        []CloudflareAccount `yaml:"accounts"`
+	Accounts        []AccountConfig `yaml:"accounts"`
 	UpdateFrequency time.Duration       `yaml:"update_frequency"`
 }
 
@@ -136,7 +136,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		return "", err
 	}
 
-	accountConfig := make([]CloudflareAccount, 0)
+	accountConfig := make([]AccountConfig, 0)
 	zoneByID := make(map[string]cloudflare.Zone)
 	accountByID := make(map[string]cloudflare.Account)
 	ctx := context.Background()
@@ -150,9 +150,9 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			return "", err
 		}
 		for i, account := range accounts {
-			accountConfig = append(accountConfig, CloudflareAccount{
+			accountConfig = append(accountConfig, AccountConfig{
 				ID:           account.ID,
-				Zones:        make([]CloudflareZone, 0),
+				Zones:        make([]ZoneConfig, 0),
 				Token:        token,
 				IPListPrefix: "crowdsec",
 			})
@@ -167,7 +167,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			for _, zone := range zones {
 				zoneByID[zone.ID] = zone
 				if zone.Account.ID == account.ID {
-					accountConfig[i].Zones = append(accountConfig[i].Zones, CloudflareZone{
+					accountConfig[i].Zones = append(accountConfig[i].Zones, ZoneConfig{
 						ID:      zone.ID,
 						Actions: []string{"challenge"},
 					})

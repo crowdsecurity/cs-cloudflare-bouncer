@@ -212,7 +212,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				err = worker.SetUpCloudflare()
+				err = worker.SetUpCloudflareIfNewState()
 				return err
 
 			})

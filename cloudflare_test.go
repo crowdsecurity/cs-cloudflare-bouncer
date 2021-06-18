@@ -148,9 +148,9 @@ func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 
-var dummyCFAccount CloudflareAccount = CloudflareAccount{
+var dummyCFAccount AccountConfig = AccountConfig{
 	ID: "dummyID",
-	Zones: []CloudflareZone{
+	Zones: []ZoneConfig{
 		{
 			ID:      "zone1",
 			Actions: []string{"block"},
@@ -184,7 +184,7 @@ func TestIPFirewallSetUp(t *testing.T) {
 		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
 	}
 	worker.Init()
-	worker.SetUpCloudflare()
+	worker.SetUpCloudflareIfNewState()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
 
 	if err != nil {
@@ -413,7 +413,7 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifyDecisionsByAction(tt.args.decisions); !reflect.DeepEqual(got, tt.want) {
+			if got := dedupAndClassifyDecisionsByAction(tt.args.decisions); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("classifyDecisionsByAction() = %v, want %v", got, tt.want)
 			}
 		})
@@ -766,7 +766,7 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 
 func Test_allZonesHaveAction(t *testing.T) {
 	type args struct {
-		zones  []CloudflareZone
+		zones  []ZoneConfig
 		action string
 	}
 	tests := []struct {
@@ -777,7 +777,7 @@ func Test_allZonesHaveAction(t *testing.T) {
 		{
 			name: "true",
 			args: args{
-				zones: []CloudflareZone{
+				zones: []ZoneConfig{
 					{
 						ActionSet: map[string]struct{}{
 							"block": {},
@@ -796,7 +796,7 @@ func Test_allZonesHaveAction(t *testing.T) {
 		{
 			name: "false",
 			args: args{
-				zones: []CloudflareZone{
+				zones: []ZoneConfig{
 					{
 						ActionSet: map[string]struct{}{
 							"challenge": {},
@@ -840,7 +840,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 	}
 
 	type fields struct {
-		Account         CloudflareAccount
+		Account         AccountConfig
 		CFStateByAction map[string]*CloudflareState
 		NewIPDecisions  []*models.Decision
 		API             cloudflareAPI
@@ -932,7 +932,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 	}
 
 	type fields struct {
-		Account            CloudflareAccount
+		Account            AccountConfig
 		CFStateByAction    map[string]*CloudflareState
 		ExpiredIPDecisions []*models.Decision
 		API                cloudflareAPI
