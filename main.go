@@ -24,7 +24,7 @@ import (
 
 var cachePath string = "./cache.json"
 
-func HandleSignals(ctx context.Context) {
+func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
 	exitChan := make(chan int)
@@ -81,6 +81,23 @@ func deleteCacheIfExists() error {
 		err = os.Remove(cachePath)
 	}
 	return err
+}
+
+func updateStates(states *[]CloudflareState, newStates map[string]*CloudflareState) {
+	found := false
+	for i, state := range *states {
+		for _, receivedState := range newStates {
+			if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
+				(*states)[i] = *receivedState
+				found = true
+			}
+		}
+	}
+	if !found {
+		for _, receivedState := range newStates {
+			*states = append(*states, *receivedState)
+		}
+	}
 }
 
 func main() {
@@ -239,28 +256,15 @@ func main() {
 	stateTomb.Go(func() error {
 		aliveWorkerCount := len(conf.CloudflareConfig.Accounts)
 		for {
-			stateByAction := <-stateStream
-			if stateByAction == nil {
+			newStates := <-stateStream
+			if newStates == nil {
 				aliveWorkerCount--
 				if aliveWorkerCount == 0 {
 					err := stateTomb.Killf("all workers are dead")
 					return err
 				}
 			}
-			found := false
-			for i, state := range workerStates {
-				for _, receivedState := range stateByAction {
-					if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
-						workerStates[i] = *receivedState
-						found = true
-					}
-				}
-			}
-			if !found {
-				for _, receivedState := range stateByAction {
-					workerStates = append(workerStates, *receivedState)
-				}
-			}
+			updateStates(&workerStates, newStates)
 			err := dumpStates(&workerStates)
 			log.Debug("updated cache")
 			if err != nil {
@@ -281,7 +285,7 @@ func main() {
 		if !sent && err != nil {
 			log.Fatalf("failed to notify: %v", err)
 		}
-		go HandleSignals(ctx)
+		go HandleSignals()
 	}
 
 	for {

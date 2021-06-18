@@ -10,10 +10,9 @@ import (
 
 func Test_loadCachedStates(t *testing.T) {
 	type args struct {
-		dataPath       string
-		expectedStates []*CloudflareState
+		dataPath string
 	}
-	tests := []struct {
+	test := []struct {
 		name string
 		args args
 	}{
@@ -22,7 +21,7 @@ func Test_loadCachedStates(t *testing.T) {
 			args: args{dataPath: "./test_data/test_cache.json"},
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range test {
 		t.Run(tt.name, func(t *testing.T) {
 			cachePath = tt.args.dataPath
 			states := make([]CloudflareState, 0)
@@ -60,6 +59,62 @@ func Test_loadCachedStates(t *testing.T) {
 				t.Errorf("expected=%+v, \n found=%+v", expectedStates[0].IPListState.IPList, states[0].IPListState.IPList)
 			}
 
+		})
+	}
+}
+
+func Test_updateStates(t *testing.T) {
+	type args struct {
+		states    *[]CloudflareState
+		newStates map[string]*CloudflareState
+	}
+	tests := []struct {
+		name string
+		args args
+		want *[]CloudflareState
+	}{
+		{
+			name: "simple fresh start",
+			args: args{
+				states: &[]CloudflareState{},
+				newStates: map[string]*CloudflareState{
+					"block": {Action: "block"},
+				},
+			},
+			want: &[]CloudflareState{
+				{Action: "block"},
+			},
+		},
+		{
+			name: "update exisiting state",
+			args: args{
+				states: &[]CloudflareState{
+					{Action: "block", AccountID: "1"},
+					{Action: "challenge", AccountID: "1"},
+					{Action: "block", AccountID: "2"},
+				},
+				newStates: map[string]*CloudflareState{
+					"block": {
+						Action:    "block",
+						AccountID: "1",
+						CurrExpr:  "ip.src.asnum in 1234",
+					},
+				},
+			},
+			want: &[]CloudflareState{
+				{Action: "block", AccountID: "1", CurrExpr: "ip.src.asnum in 1234"},
+				{Action: "challenge", AccountID: "1"},
+				{Action: "block", AccountID: "2"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := tt.args.states
+			updateStates(st, tt.args.newStates)
+			if !reflect.DeepEqual(*st, *tt.want) {
+				t.Errorf("expected=%v\n found=%v", *tt.want, *st)
+			}
 		})
 	}
 }

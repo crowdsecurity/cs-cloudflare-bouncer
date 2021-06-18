@@ -501,6 +501,10 @@ func (worker *CloudflareWorker) Init() error {
 	if worker.API == nil { // this for easy swapping during tests
 		worker.API, err = cloudflare.NewWithAPIToken(worker.Account.Token, cloudflare.UsingAccount(worker.Account.ID))
 	}
+	if err != nil {
+		worker.Logger.Error(err.Error())
+		return err
+	}
 	worker.Logger.Debug("setup of API complete")
 
 	if len(worker.CFStateByAction) != 0 {

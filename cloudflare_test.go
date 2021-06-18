@@ -54,7 +54,7 @@ func (cfAPI *mockCloudflareAPI) ListIPLists(ctx context.Context) ([]cloudflare.I
 
 func (cfAPI *mockCloudflareAPI) CreateFirewallRules(ctx context.Context, zone string, rules []cloudflare.FirewallRule) ([]cloudflare.FirewallRule, error) {
 	cfAPI.FirewallRulesList = append(cfAPI.FirewallRulesList, rules...)
-	for i, _ := range cfAPI.FirewallRulesList {
+	for i := range cfAPI.FirewallRulesList {
 		cfAPI.FirewallRulesList[i].ID = strconv.Itoa(i)
 		cfAPI.FirewallRulesList[i].Filter.ID = strconv.Itoa(i)
 	}
@@ -115,7 +115,7 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 			break
 		}
 	}
-	for i, _ := range items {
+	for i := range items {
 		IPItems[i] = cloudflare.IPListItem{IP: items[i].IP}
 	}
 
@@ -256,8 +256,8 @@ func Test_setToExprList(t *testing.T) {
 			name: "unquoted",
 			args: args{
 				set: map[string]struct{}{
-					"1.2.3.4": struct{}{},
-					"6.7.8.9": struct{}{},
+					"1.2.3.4": {},
+					"6.7.8.9": {},
 				},
 				quotes: false,
 			},
@@ -267,8 +267,8 @@ func Test_setToExprList(t *testing.T) {
 			name: "quoted",
 			args: args{
 				set: map[string]struct{}{
-					"US": struct{}{},
-					"UK": struct{}{},
+					"US": {},
+					"UK": {},
 				},
 				quotes: true,
 			},
@@ -287,7 +287,6 @@ func Test_setToExprList(t *testing.T) {
 func TestCloudflareState_computeExpression(t *testing.T) {
 	type fields struct {
 		ipListState         IPListState
-		action              string
 		countrySet          map[string]struct{}
 		autonomousSystemSet map[string]struct{}
 	}
@@ -304,8 +303,8 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 		{
 			name: "only country",
 			fields: fields{countrySet: map[string]struct{}{
-				"US": struct{}{},
-				"UK": struct{}{},
+				"US": {},
+				"UK": {},
 			}},
 			want: `(ip.geoip.country in {"UK" "US"})`,
 		},
@@ -318,7 +317,7 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 			name: "ip list + as ban",
 			fields: fields{
 				ipListState:         IPListState{IPList: &cloudflare.IPList{Name: "crowdsec_block"}},
-				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
+				autonomousSystemSet: map[string]struct{}{"1234": {}, "5432": {}},
 			},
 			want: `(ip.geoip.asnum in {1234 5432}) or (ip.src in $crowdsec_block)`,
 		},
@@ -326,8 +325,8 @@ func TestCloudflareState_computeExpression(t *testing.T) {
 			name: "ip list + as ban + country",
 			fields: fields{
 				ipListState:         IPListState{IPList: &cloudflare.IPList{Name: "crowdsec_block"}},
-				autonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "5432": struct{}{}},
-				countrySet:          map[string]struct{}{"US": struct{}{}, "UK": struct{}{}},
+				autonomousSystemSet: map[string]struct{}{"1234": {}, "5432": {}},
+				countrySet:          map[string]struct{}{"US": {}, "UK": {}},
 			},
 			want: `(ip.geoip.country in {"UK" "US"}) or (ip.geoip.asnum in {1234 5432}) or (ip.src in $crowdsec_block)`,
 		},
@@ -371,11 +370,11 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 			name: "all supported, no dups",
 			args: args{decisions: []*models.Decision{&decision1, &decision2}},
 			want: map[string][]*models.Decision{
-				"defaulted": []*models.Decision{},
-				"block": []*models.Decision{
+				"defaulted": {},
+				"block": {
 					&decision1,
 				},
-				"challenge": []*models.Decision{
+				"challenge": {
 					&decision2,
 				},
 			},
@@ -384,18 +383,18 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 			name: "with dups, all supported",
 			args: args{decisions: []*models.Decision{&decision2, &decision2dup}},
 			want: map[string][]*models.Decision{
-				"defaulted": []*models.Decision{},
-				"challenge": []*models.Decision{&decision2},
+				"defaulted": {},
+				"challenge": {&decision2},
 			},
 		},
 		{
 			name: "unsupported, no dups",
 			args: args{decisions: []*models.Decision{&decision1, &decisionUnsup}},
 			want: map[string][]*models.Decision{
-				"defaulted": []*models.Decision{
+				"defaulted": {
 					&decisionUnsup,
 				},
-				"block": []*models.Decision{
+				"block": {
 					&decision1,
 				},
 			},
@@ -406,9 +405,9 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 				decisions: []*models.Decision{&decisionUnsup, &decision1, &decision2},
 			},
 			want: map[string][]*models.Decision{
-				"defaulted": []*models.Decision{},
-				"block":     []*models.Decision{&decision1},
-				"challenge": []*models.Decision{&decision2},
+				"defaulted": {},
+				"block":     {&decision1},
+				"challenge": {&decision2},
 			},
 		},
 	}
@@ -559,8 +558,8 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 			name: "simple delete AS",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						AutonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "1236": struct{}{}},
+					action: {
+						AutonomousSystemSet: map[string]struct{}{"1234": {}, "1236": {}},
 					},
 				},
 				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}},
@@ -571,8 +570,8 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 			name: "delete something that does not exist",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						AutonomousSystemSet: map[string]struct{}{"1235": struct{}{}},
+					action: {
+						AutonomousSystemSet: map[string]struct{}{"1235": {}},
 					},
 				},
 				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}},
@@ -583,8 +582,8 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 			name: "delete something multiple times",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						AutonomousSystemSet: map[string]struct{}{"1234": struct{}{}, "9999": struct{}{}},
+					action: {
+						AutonomousSystemSet: map[string]struct{}{"1234": {}, "9999": {}},
 					},
 				},
 				ExpiredASDecisions: []*models.Decision{{Value: &ASNum1, Type: &action}, {Value: &ASNum1, Type: &action}, {Value: &ASNum1, Type: &action}},
@@ -706,8 +705,8 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 			name: "simple delete AS",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						CountrySet: map[string]struct{}{"UK": struct{}{}, "1236": struct{}{}},
+					action: {
+						CountrySet: map[string]struct{}{"UK": {}, "1236": {}},
 					},
 				},
 				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}},
@@ -718,8 +717,8 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 			name: "delete something that does not exist",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						CountrySet: map[string]struct{}{"1235": struct{}{}},
+					action: {
+						CountrySet: map[string]struct{}{"1235": {}},
 					},
 				},
 				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}},
@@ -730,8 +729,8 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 			name: "delete something multiple times",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
-					action: &CloudflareState{
-						CountrySet: map[string]struct{}{"UK": struct{}{}, "9999": struct{}{}},
+					action: {
+						CountrySet: map[string]struct{}{"UK": {}, "9999": {}},
 					},
 				},
 				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}},
@@ -781,12 +780,12 @@ func Test_allZonesHaveAction(t *testing.T) {
 				zones: []CloudflareZone{
 					{
 						ActionSet: map[string]struct{}{
-							"block": struct{}{},
+							"block": {},
 						},
 					},
 					{
 						ActionSet: map[string]struct{}{
-							"block": struct{}{},
+							"block": {},
 						},
 					},
 				},
@@ -800,12 +799,12 @@ func Test_allZonesHaveAction(t *testing.T) {
 				zones: []CloudflareZone{
 					{
 						ActionSet: map[string]struct{}{
-							"challenge": struct{}{},
+							"challenge": {},
 						},
 					},
 					{
 						ActionSet: map[string]struct{}{
-							"block": struct{}{},
+							"block": {},
 						},
 					},
 				},
@@ -831,7 +830,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 	randomAction := "foo"
 
 	state := map[string]*CloudflareState{
-		"block": &CloudflareState{
+		"block": {
 			AccountID: dummyCFAccount.ID,
 			IPListState: IPListState{
 				ItemByIP: make(map[string]cloudflare.IPListItem),
@@ -852,7 +851,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 		want   map[string]cloudflare.IPListItem
 	}{
 		{
-			name: "simple supported ip decision",
+			name: "supported ip decision",
 			fields: fields{
 				Account:         dummyCFAccount,
 				CFStateByAction: state,
@@ -862,13 +861,13 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				API: mockCfAPI,
 			},
 			want: map[string]cloudflare.IPListItem{
-				"1.2.3.4": cloudflare.IPListItem{
+				"1.2.3.4": {
 					IP: "1.2.3.4",
 				},
 			},
 		},
 		{
-			name: "simple unsupported ip decision",
+			name: "unsupported ip decision",
 			fields: fields{
 				Account:         dummyCFAccount,
 				CFStateByAction: state,
@@ -878,7 +877,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				API: mockCfAPI,
 			},
 			want: map[string]cloudflare.IPListItem{
-				"1.2.3.4": cloudflare.IPListItem{
+				"1.2.3.4": {
 					IP: "1.2.3.4",
 				},
 			},
@@ -896,6 +895,100 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
 			}
 			err := worker.AddNewIPs()
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
+				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
+			}
+		})
+	}
+}
+
+func TestCloudflareWorker_DeleteIPs(t *testing.T) {
+	// decision fixture
+	ip1 := "1.2.3.4"
+	action := "ban"
+	scenario := "crowdsec/demo"
+	randomAction := "foo"
+
+	state := map[string]*CloudflareState{
+		"block": {
+			AccountID: dummyCFAccount.ID,
+			IPListState: IPListState{
+				ItemByIP: map[string]cloudflare.IPListItem{
+					"1.2.3.4": {
+						IP: "1.2.3.4",
+						ID: "1",
+					},
+					"1.2.3.5": {
+						IP: "1.2.3.5",
+						ID: "2",
+					},
+				},
+				IPList: &cloudflare.IPList{},
+			},
+		},
+	}
+
+	type fields struct {
+		Account            CloudflareAccount
+		CFStateByAction    map[string]*CloudflareState
+		ExpiredIPDecisions []*models.Decision
+		API                cloudflareAPI
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   map[string]cloudflare.IPListItem
+	}{
+		{
+			name: "supported ip decision",
+			fields: fields{
+				Account:         dummyCFAccount,
+				CFStateByAction: state,
+				ExpiredIPDecisions: []*models.Decision{
+					{Value: &ip1, Type: &action, Scenario: &scenario},
+				},
+				API: mockCfAPI,
+			},
+			want: map[string]cloudflare.IPListItem{
+				"1.2.3.5": {
+					IP: "1.2.3.5",
+					ID: "2",
+				},
+			},
+		},
+		{
+			name: "unsupported ip decision",
+			fields: fields{
+				Account:         dummyCFAccount,
+				CFStateByAction: state,
+				ExpiredIPDecisions: []*models.Decision{
+					{Value: &ip1, Type: &randomAction, Scenario: &scenario},
+				},
+				API: mockCfAPI,
+			},
+			want: map[string]cloudflare.IPListItem{
+				"1.2.3.5": {
+					IP: "1.2.3.5",
+					ID: "2",
+				},
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				Account:            tt.fields.Account,
+				CFStateByAction:    tt.fields.CFStateByAction,
+				ExpiredIPDecisions: tt.fields.ExpiredIPDecisions,
+				API:                mockCfAPI,
+				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
+				Count:              promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test2%d", i), Help: "no help you're just a test"}),
+			}
+			err := worker.DeleteIPs()
 			if err != nil {
 				t.Error(err)
 			}
