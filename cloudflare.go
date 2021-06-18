@@ -133,7 +133,6 @@ type cloudflareAPI interface {
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
 }
 
-
 func min(a int, b int) int {
 	if a > b {
 		return b

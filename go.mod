@@ -8,6 +8,7 @@ require (
 	github.com/crowdsecurity/crowdsec v1.0.14
 	github.com/crowdsecurity/go-cs-bouncer v0.0.0-20210113162030-7eec88c1afa8
 	github.com/go-openapi/errors v0.19.9
+	github.com/prometheus/client_golang v1.9.0
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0

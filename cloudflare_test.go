@@ -108,8 +108,11 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
-
 	return make([]cloudflare.IPListItem, 0), nil
+}
+
+func (cfAPI *mockCloudflareAPI) Accounts(ctx context.Context, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Account, cloudflare.ResultInfo, error) {
+	return []cloudflare.Account{}, cloudflare.ResultInfo{}, nil
 }
 
 var dummyCFAccount CloudflareAccount = CloudflareAccount{
@@ -723,6 +726,64 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 				t.Errorf("expected=%v found=%v ", tt.want, found)
 			}
 
+		})
+	}
+}
+
+func Test_allZonesHaveAction(t *testing.T) {
+	type args struct {
+		zones  []CloudflareZone
+		action string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "true",
+			args: args{
+				zones: []CloudflareZone{
+					{
+						ActionSet: map[string]struct{}{
+							"block": struct{}{},
+						},
+					},
+					{
+						ActionSet: map[string]struct{}{
+							"block": struct{}{},
+						},
+					},
+				},
+				action: "block",
+			},
+			want: true,
+		},
+		{
+			name: "false",
+			args: args{
+				zones: []CloudflareZone{
+					{
+						ActionSet: map[string]struct{}{
+							"challenge": struct{}{},
+						},
+					},
+					{
+						ActionSet: map[string]struct{}{
+							"block": struct{}{},
+						},
+					},
+				},
+				action: "block",
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := allZonesHaveAction(tt.args.zones, tt.args.action); got != tt.want {
+				t.Errorf("allZonesHaveAction() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

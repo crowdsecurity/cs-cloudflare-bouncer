@@ -124,30 +124,30 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	return config, nil
 }
 
-func ConfigTokens(tokens string, baseConfigPath string) error {
+func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 	baseConfig := &bouncerConfig{}
 	configBuff, err := ioutil.ReadFile(baseConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to read %s : %v", baseConfigPath, err)
+		return "", fmt.Errorf("failed to read %s : %v", baseConfigPath, err)
 	}
 
 	err = yaml.Unmarshal(configBuff, &baseConfig)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	accountConfig := make([]CloudflareAccount, 0)
 	zoneByID := make(map[string]cloudflare.Zone)
 	accountByID := make(map[string]cloudflare.Account)
+	ctx := context.Background()
 	for _, token := range strings.Split(tokens, ",") {
 		api, err := cloudflare.NewWithAPIToken(token)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
-		ctx := context.Background()
 		accounts, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{})
 		if err != nil {
-			return err
+			return "", err
 		}
 		for i, account := range accounts {
 			accountConfig = append(accountConfig, CloudflareAccount{
@@ -161,7 +161,7 @@ func ConfigTokens(tokens string, baseConfigPath string) error {
 			accountByID[account.ID] = account
 			zones, err := api.ListZones(ctx)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			for _, zone := range zones {
@@ -179,20 +179,21 @@ func ConfigTokens(tokens string, baseConfigPath string) error {
 	baseConfig.CloudflareConfig = cfConfig
 	data, err := yaml.Marshal(baseConfig)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	lines := string(data)
-	for _, line := range strings.Split(lines, "\n") {
+	lineString := string(data)
+	lines := strings.Split(lineString, "\n")
+	for i, line := range lines {
 		words := strings.Split(line, " ")
 		lastWord := words[len(words)-1]
 		if zone, ok := zoneByID[lastWord]; ok {
-			fmt.Printf("%s #%s\n", line, zone.Name)
+			line = fmt.Sprintf("%s #%s", line, zone.Name)
 		} else if account, ok := accountByID[lastWord]; ok {
-			fmt.Printf("%s #%s\n", line, account.Name)
-		} else {
-			fmt.Println(line)
+			line = fmt.Sprintf("%s #%s", line, account.Name)
 		}
+		lines[i] = line
 	}
-	return nil
+
+	return strings.Join(lines, "\n"), nil
 }

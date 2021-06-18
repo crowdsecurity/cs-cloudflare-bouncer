@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -108,10 +109,11 @@ func main() {
 	}
 
 	if configTokens != nil && *configTokens != "" {
-		err := ConfigTokens(*configTokens, *configPath)
+		cfg, err := ConfigTokens(*configTokens, *configPath)
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Print(cfg)
 		return
 	}
 
