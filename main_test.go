@@ -19,7 +19,7 @@ func Test_loadCachedStates(t *testing.T) {
 	}{
 		{
 			name: "simple load cache",
-			args: args{dataPath: "./test_data/cache.json"},
+			args: args{dataPath: "./test_data/test_cache.json"},
 		},
 	}
 	for _, tt := range tests {
