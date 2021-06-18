@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -31,7 +33,7 @@ func (cfAPI *mockCloudflareAPI) ListZones(ctx context.Context, z ...string) ([]c
 }
 
 func (cfAPI *mockCloudflareAPI) CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error) {
-	ipList := cloudflare.IPList{ID: name}
+	ipList := cloudflare.IPList{ID: strconv.Itoa(len(cfAPI.IPLists))}
 	cfAPI.IPLists = append(cfAPI.IPLists, ipList)
 	return ipList, nil
 }
@@ -91,28 +93,59 @@ func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string
 }
 
 func (cfAPI *mockCloudflareAPI) UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error) {
-	return make([]cloudflare.Filter, 0), nil
+	for _, f := range filters {
+		for j := range cfAPI.FilterList {
+			if cfAPI.FilterList[j].ID == f.ID {
+				cfAPI.FilterList[j] = f
+			}
+		}
+	}
+	return cfAPI.FilterList, nil
 }
 
 func (cfAPI *mockCloudflareAPI) FirewallRules(ctx context.Context, zone string, opts cloudflare.PaginationOptions) ([]cloudflare.FirewallRule, error) {
 	return cfAPI.FirewallRulesList, nil
 }
+
 func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) ([]cloudflare.IPListItem, error) {
-	ips := make([]cloudflare.IPListItem, len(items))
+	IPItems := make([]cloudflare.IPListItem, len(items))
+	for j := range cfAPI.IPLists {
+		if cfAPI.IPLists[j].ID == id {
+			cfAPI.IPLists[j].NumItems += len(items)
+			break
+		}
+	}
 	for i, _ := range items {
-		ips[i] = cloudflare.IPListItem{IP: items[i].IP}
+		IPItems[i] = cloudflare.IPListItem{IP: items[i].IP}
 	}
 
-	cfAPI.IPListItems[id] = append(cfAPI.IPListItems[id], ips...)
-
+	cfAPI.IPListItems[id] = append(cfAPI.IPListItems[id], IPItems...)
 	return cfAPI.IPListItems[id], nil
 }
-func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
-	return make([]cloudflare.IPListItem, 0), nil
-}
 
-func (cfAPI *mockCloudflareAPI) Accounts(ctx context.Context, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Account, cloudflare.ResultInfo, error) {
-	return []cloudflare.Account{}, cloudflare.ResultInfo{}, nil
+func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
+	for j := range cfAPI.IPLists {
+		if cfAPI.IPLists[j].ID == id {
+			cfAPI.IPLists[j].NumItems -= len(items.Items)
+			break
+		}
+	}
+	rm := make([]bool, len(cfAPI.IPListItems[id]))
+	for _, item := range items.Items {
+		for j, currItem := range cfAPI.IPListItems[id] {
+			if currItem.ID == item.ID {
+				rm[j] = true
+			}
+		}
+	}
+	newItems := make([]cloudflare.IPListItem, 0)
+	for i, item := range cfAPI.IPListItems[id] {
+		if !rm[i] {
+			newItems = append(newItems, item)
+		}
+	}
+	cfAPI.IPListItems[id] = newItems
+	return cfAPI.IPListItems[id], nil
 }
 
 var dummyCFAccount CloudflareAccount = CloudflareAccount{
@@ -123,7 +156,8 @@ var dummyCFAccount CloudflareAccount = CloudflareAccount{
 			Actions: []string{"block"},
 		},
 	},
-	IPListPrefix: "crowdsec",
+	IPListPrefix:  "crowdsec",
+	DefaultAction: "block",
 }
 
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
@@ -134,6 +168,7 @@ var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
 	ZoneList: []cloudflare.Zone{
 		{ID: "zone1"},
 	},
+	IPListItems: make(map[string][]cloudflare.IPListItem),
 }
 
 func TestIPFirewallSetUp(t *testing.T) {
@@ -783,6 +818,89 @@ func Test_allZonesHaveAction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := allZonesHaveAction(tt.args.zones, tt.args.action); got != tt.want {
 				t.Errorf("allZonesHaveAction() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudflareWorker_AddNewIPs(t *testing.T) {
+	// decision fixture
+	ip1 := "1.2.3.4"
+	action := "ban"
+	scenario := "crowdsec/demo"
+	randomAction := "foo"
+
+	state := map[string]*CloudflareState{
+		"block": &CloudflareState{
+			AccountID: dummyCFAccount.ID,
+			IPListState: IPListState{
+				ItemByIP: make(map[string]cloudflare.IPListItem),
+				IPList:   &cloudflare.IPList{},
+			},
+		},
+	}
+
+	type fields struct {
+		Account         CloudflareAccount
+		CFStateByAction map[string]*CloudflareState
+		NewIPDecisions  []*models.Decision
+		API             cloudflareAPI
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   map[string]cloudflare.IPListItem
+	}{
+		{
+			name: "simple supported ip decision",
+			fields: fields{
+				Account:         dummyCFAccount,
+				CFStateByAction: state,
+				NewIPDecisions: []*models.Decision{
+					{Value: &ip1, Type: &action, Scenario: &scenario},
+				},
+				API: mockCfAPI,
+			},
+			want: map[string]cloudflare.IPListItem{
+				"1.2.3.4": cloudflare.IPListItem{
+					IP: "1.2.3.4",
+				},
+			},
+		},
+		{
+			name: "simple unsupported ip decision",
+			fields: fields{
+				Account:         dummyCFAccount,
+				CFStateByAction: state,
+				NewIPDecisions: []*models.Decision{
+					{Value: &ip1, Type: &randomAction, Scenario: &scenario},
+				},
+				API: mockCfAPI,
+			},
+			want: map[string]cloudflare.IPListItem{
+				"1.2.3.4": cloudflare.IPListItem{
+					IP: "1.2.3.4",
+				},
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := &CloudflareWorker{
+				Account:         tt.fields.Account,
+				CFStateByAction: tt.fields.CFStateByAction,
+				NewIPDecisions:  tt.fields.NewIPDecisions,
+				API:             mockCfAPI,
+				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
+				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
+			}
+			err := worker.AddNewIPs()
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
+				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
 			}
 		})
 	}
