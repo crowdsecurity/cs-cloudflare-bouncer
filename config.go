@@ -21,7 +21,7 @@ type ZoneConfig struct {
 }
 type AccountConfig struct {
 	ID            string           `yaml:"id"`
-	Zones         []ZoneConfig `yaml:"zones"`
+	ZoneConfigs         []ZoneConfig `yaml:"zones"`
 	Token         string           `yaml:"token"`
 	IPListPrefix  string           `yaml:"ip_list_prefix"`
 	DefaultAction string           `yaml:"default_action"`
@@ -80,8 +80,8 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			return nil, fmt.Errorf("account %s 's default action is invalid. %s ", account.ID, validChoiceMsg)
 		}
 
-		for j, zone := range account.Zones {
-			config.CloudflareConfig.Accounts[i].Zones[j].ActionSet = map[string]struct{}{}
+		for j, zone := range account.ZoneConfigs {
+			config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet = map[string]struct{}{}
 			if len(zone.Actions) == 0 {
 				return nil, fmt.Errorf("account %s 's zone %s has no action", account.ID, zone.ID)
 			}
@@ -89,7 +89,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 				if _, ok := validAction[a]; !ok {
 					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
 				}
-				config.CloudflareConfig.Accounts[i].Zones[j].ActionSet[a] = struct{}{}
+				config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet[a] = struct{}{}
 			}
 
 			if _, ok := zoneIdSet[zone.ID]; ok {
@@ -152,7 +152,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		for i, account := range accounts {
 			accountConfig = append(accountConfig, AccountConfig{
 				ID:           account.ID,
-				Zones:        make([]ZoneConfig, 0),
+				ZoneConfigs:        make([]ZoneConfig, 0),
 				Token:        token,
 				IPListPrefix: "crowdsec",
 			})
@@ -167,7 +167,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			for _, zone := range zones {
 				zoneByID[zone.ID] = zone
 				if zone.Account.ID == account.ID {
-					accountConfig[i].Zones = append(accountConfig[i].Zones, ZoneConfig{
+					accountConfig[i].ZoneConfigs = append(accountConfig[i].ZoneConfigs, ZoneConfig{
 						ID:      zone.ID,
 						Actions: []string{"challenge"},
 					})

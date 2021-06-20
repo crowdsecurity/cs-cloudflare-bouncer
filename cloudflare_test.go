@@ -150,7 +150,7 @@ func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string
 
 var dummyCFAccount AccountConfig = AccountConfig{
 	ID: "dummyID",
-	Zones: []ZoneConfig{
+	ZoneConfigs: []ZoneConfig{
 		{
 			ID:      "zone1",
 			Actions: []string{"block"},

@@ -29,7 +29,7 @@ func TestNewConfig(t *testing.T) {
 					Accounts: []AccountConfig{
 						{
 							ID: "${CF_ACC_ID}",
-							Zones: []ZoneConfig{
+							ZoneConfigs: []ZoneConfig{
 								{
 									ID:      "${CF_ZONE_ID}",
 									Actions: []string{"block"},

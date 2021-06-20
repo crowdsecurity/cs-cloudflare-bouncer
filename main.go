@@ -151,7 +151,7 @@ func main() {
 
 	zoneLocks := make([]ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
-		for _, zone := range account.Zones {
+		for _, zone := range account.ZoneConfigs {
 			zoneLocks = append(zoneLocks, ZoneLock{ZoneID: zone.ID, Lock: &sync.Mutex{}})
 		}
 	}

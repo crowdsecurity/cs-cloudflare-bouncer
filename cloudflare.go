@@ -350,7 +350,7 @@ func (worker *CloudflareWorker) setUpIPList() error {
 }
 
 func (worker *CloudflareWorker) setUpRules() error {
-	for _, zone := range worker.Account.Zones {
+	for _, zone := range worker.Account.ZoneConfigs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for _, action := range zone.Actions {
 			ruleExpression := worker.CFStateByAction[action].CurrExpr
@@ -373,7 +373,7 @@ func (worker *CloudflareWorker) AddNewIPs() error {
 	decisonsByAction := dedupAndClassifyDecisionsByAction(worker.NewIPDecisions)
 	for action, decisions := range decisonsByAction {
 		// In case some zones support this action and others don't,  we put this in account's default action.
-		if !allZonesHaveAction(worker.Account.Zones, action) {
+		if !allZonesHaveAction(worker.Account.ZoneConfigs, action) {
 			if worker.Account.DefaultAction == "none" {
 				worker.Logger.Debugf("dropping IP decisions with unsupported action %s", action)
 				continue
@@ -416,7 +416,7 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 	decisonsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredIPDecisions)
 	for action, decisions := range decisonsByAction {
 		// In case some zones support this action and others don't,  we put this in account's default action.
-		if !allZonesHaveAction(worker.Account.Zones, action) {
+		if !allZonesHaveAction(worker.Account.ZoneConfigs, action) {
 			if worker.Account.DefaultAction == "none" {
 				worker.Logger.Debugf("dropping IP delete decisions with unsupported action %s", action)
 				continue
@@ -530,7 +530,7 @@ func (worker *CloudflareWorker) Init() error {
 		zoneByID[zone.ID] = zone
 	}
 
-	for _, z := range worker.Account.Zones {
+	for _, z := range worker.Account.ZoneConfigs {
 		if zone, ok := zoneByID[z.ID]; ok {
 			// FIXME this is probably wrong.
 			if !zone.Plan.IsSubscribed && len(z.Actions) > 1 {
@@ -603,15 +603,10 @@ func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.Decisio
 
 func (worker *CloudflareWorker) SendASBans() error {
 	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.NewASDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
 				if _, ok := worker.CFStateByAction[action].AutonomousSystemSet[*decision.Value]; !ok {
 					zoneLogger.Debugf("found new AS ban for %s", *decision.Value)
@@ -626,15 +621,10 @@ func (worker *CloudflareWorker) SendASBans() error {
 
 func (worker *CloudflareWorker) DeleteASBans() error {
 	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredASDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
 				if _, ok := worker.CFStateByAction[action].AutonomousSystemSet[*decision.Value]; ok {
 					zoneLogger.Debugf("found expired AS ban for %s", *decision.Value)
@@ -647,17 +637,23 @@ func (worker *CloudflareWorker) DeleteASBans() error {
 	return nil
 }
 
+func (worker *CloudflareWorker) normalizeActionForZone(action string, zoneCfg ZoneConfig) string {
+	zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
+	if _, spAction := zoneCfg.ActionSet[action]; action == "defaulted" || !spAction {
+		if action != "defaulted" {
+			zoneLogger.Debugf("defaulting %s action to %s action", action, zoneCfg.Actions[0])
+		}
+		action = zoneCfg.Actions[0]
+	}
+	return action
+}
+
 func (worker *CloudflareWorker) SendCountryBans() error {
 	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.NewCountryDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
 				if _, ok := worker.CFStateByAction[action].CountrySet[*decision.Value]; !ok {
 					zoneLogger.Debugf("found new country ban for %s", *decision.Value)
@@ -672,15 +668,10 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 
 func (worker *CloudflareWorker) DeleteCountryBans() error {
 	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredCountryDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
 				if _, ok := worker.CFStateByAction[action].CountrySet[*decision.Value]; ok {
 					zoneLogger.Debugf("found expired country ban for %s", *decision.Value)
@@ -701,7 +692,7 @@ func (worker *CloudflareWorker) UpdateRules() error {
 			continue
 		}
 		stateIsNew = true
-		for _, zone := range worker.Account.Zones {
+		for _, zone := range worker.Account.ZoneConfigs {
 			zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 			updatedFilters := make([]cloudflare.Filter, 0)
 			if _, ok := zone.ActionSet[action]; ok {
