@@ -22,6 +22,8 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
+const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
+
 var cachePath string = "./cache.json"
 
 func HandleSignals() {
@@ -43,23 +45,24 @@ func HandleSignals() {
 }
 
 func loadCachedStates(states *[]CloudflareState) error {
-	if _, err := os.Stat(cachePath); err == nil {
-		f, err := os.Open(cachePath)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if err != nil {
-			return err
-		}
-		data, err := io.ReadAll(f)
-		if err != nil {
-			return err
-		}
-		json.Unmarshal(data, &states)
-	} else {
+	if _, err := os.Stat(cachePath); err != nil {
 		log.Debug("no cache found")
+		return nil
 	}
+
+	f, err := os.Open(cachePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	json.Unmarshal(data, &states)
 	return nil
 }
 
@@ -118,7 +121,7 @@ func main() {
 	}
 
 	if configPath == nil || *configPath == "" {
-		*configPath = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
+		*configPath = DEFAULT_CONFIG_PATH
 	}
 	conf, err := NewConfig(*configPath)
 	if err != nil {
