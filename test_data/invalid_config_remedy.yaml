@@ -8,8 +8,9 @@ cloudflare_config:
   - id: ${CF_ACC_ID}
     token: ${CF_TOKEN} 
     ip_list_prefix: crowdsec
+    default_action: challenge
     zones:
-    - remediation: 
+    - actions: 
       - block
       zone_id: ${CF_ZONE_ID} 
 

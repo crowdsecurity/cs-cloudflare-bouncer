@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -11,11 +15,18 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/tomb.v2"
 )
 
-func HandleSignals(ctx context.Context) {
+const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
+
+var cachePath string = "./cache.json"
+
+func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
 	exitChan := make(chan int)
@@ -33,6 +44,65 @@ func HandleSignals(ctx context.Context) {
 	os.Exit(code)
 }
 
+func loadCachedStates(states *[]CloudflareState) error {
+	if _, err := os.Stat(cachePath); err != nil {
+		log.Debug("no cache found")
+		return nil
+	}
+
+	f, err := os.Open(cachePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	json.Unmarshal(data, &states)
+	return nil
+}
+
+func dumpStates(states *[]CloudflareState) error {
+	data, err := json.MarshalIndent(states, "", "	")
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(cachePath, data, 0666)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteCacheIfExists() error {
+	var err error
+	if _, err = os.Stat(cachePath); err == nil {
+		err = os.Remove(cachePath)
+	}
+	return err
+}
+
+func updateStates(states *[]CloudflareState, newStates map[string]*CloudflareState) {
+	found := false
+	for i, state := range *states {
+		for _, receivedState := range newStates {
+			if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
+				(*states)[i] = *receivedState
+				found = true
+			}
+		}
+	}
+	if !found {
+		for _, receivedState := range newStates {
+			*states = append(*states, *receivedState)
+		}
+	}
+}
+
 func main() {
 
 	// Create go routine per cloudflare account
@@ -41,28 +111,33 @@ func main() {
 
 	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
 	configPath := flag.String("c", "", "path to config file")
+	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
+	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
+
 	flag.Parse()
 
-	if configTokens != nil && *configTokens != "" {
-		if configPath == nil || *configPath == "" {
-			err := ConfigTokens(*configTokens, "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml")
-			if err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			err := ConfigTokens(*configTokens, *configPath)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		return
+	if *delete && *onlySetup {
+		log.Fatal("conflicting cli arguements, pass only one of '-d' or '-s' ")
 	}
+
 	if configPath == nil || *configPath == "" {
-		log.Fatalf("config file required")
+		*configPath = DEFAULT_CONFIG_PATH
+	}
+	conf, err := NewConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if configTokens != nil && *configTokens != "" {
+		cfg, err := ConfigTokens(*configTokens, *configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print(cfg)
+		return
 	}
 
 	ctx := context.Background()
-	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,19 +154,42 @@ func main() {
 
 	zoneLocks := make([]ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
-		for _, zone := range account.Zones {
+		for _, zone := range account.ZoneConfigs {
 			zoneLocks = append(zoneLocks, ZoneLock{ZoneID: zone.ID, Lock: &sync.Mutex{}})
 		}
 	}
 
+	var workerTomb tomb.Tomb
+	var serverTomb tomb.Tomb
+
+	var wg sync.WaitGroup
+	var Count prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cloudflare_api_calls",
+		Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
+	})
+
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
-	var workerTomb tomb.Tomb
-	var wg sync.WaitGroup
+	stateStream := make(chan map[string]*CloudflareState)
+	workerStates := make([]CloudflareState, 0)
+
+	err = loadCachedStates(&workerStates)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for _, account := range conf.CloudflareConfig.Accounts {
 		lapiStream := make(chan *models.DecisionsStreamResponse)
 		lapiStreams = append(lapiStreams, lapiStream)
+		states := make(map[string]*CloudflareState)
+		for _, s := range workerStates {
+			//TODO  search can be avoided by having a map by account id
+			tmp := s
+			if s.AccountID == account.ID {
+				states[s.Action] = &tmp
+			}
+		}
+
 		wg.Add(1)
 		worker := CloudflareWorker{
 			Account:         account,
@@ -100,26 +198,89 @@ func main() {
 			LAPIStream:      lapiStream,
 			UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
 			Wg:              &wg,
+			UpdatedState:    stateStream,
+			CFStateByAction: states,
+			Count:           Count,
 		}
-		workerTomb.Go(func() error {
-			err := worker.Run()
-			return err
-		})
+		if *onlySetup {
+			workerTomb.Go(func() error {
+				var err error = nil
+				defer func() {
+					workerTomb.Kill(err)
+					stateStream <- nil
+				}()
+
+				worker.CFStateByAction = nil
+				err = worker.Init()
+				if err != nil {
+					return err
+				}
+				err = worker.SetUpCloudflareIfNewState()
+				return err
+
+			})
+		} else if *delete {
+			workerTomb.Go(func() error {
+				var err error = nil
+				defer func() {
+					workerTomb.Kill(err)
+					stateStream <- nil
+				}()
+				err = worker.Init()
+				if err != nil {
+					return nil
+				}
+				err = worker.deleteExistingIPList()
+				return err
+
+			})
+		} else {
+			workerTomb.Go(func() error {
+				err := worker.Run()
+				return err
+			})
+		}
 	}
 	var dispatchTomb tomb.Tomb
+	var stateTomb tomb.Tomb
 
 	dispatchTomb.Go(func() error {
 		wg.Wait()
 		go csLapi.Run()
 		for {
-			select {
-			case decisions := <-csLapi.Stream:
-				// broadcast decision to each worker
-				for _, lapiStream := range lapiStreams {
-					lapiStream <- decisions
-				}
+			decisions := <-csLapi.Stream
+			// broadcast decision to each worker
+			for _, lapiStream := range lapiStreams {
+				lapiStream <- decisions
 			}
 		}
+	})
+
+	stateTomb.Go(func() error {
+		aliveWorkerCount := len(conf.CloudflareConfig.Accounts)
+		for {
+			newStates := <-stateStream
+			if newStates == nil {
+				aliveWorkerCount--
+				if aliveWorkerCount == 0 {
+					err := stateTomb.Killf("all workers are dead")
+					return err
+				}
+			}
+			updateStates(&workerStates, newStates)
+			err := dumpStates(&workerStates)
+			log.Debug("updated cache")
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+		}
+	})
+
+	serverTomb.Go(func() error {
+		http.Handle("/metrics", promhttp.Handler())
+		err := http.ListenAndServe(":2112", nil)
+		return err
 	})
 
 	if conf.Daemon {
@@ -127,17 +288,41 @@ func main() {
 		if !sent && err != nil {
 			log.Fatalf("failed to notify: %v", err)
 		}
-		go HandleSignals(ctx)
+		go HandleSignals()
 	}
 
 	for {
 		select {
 		case <-workerTomb.Dying():
 			dispatchTomb.Kill(nil)
-			log.Fatal("at least one of the workers is dying, shutdown")
+			err := workerTomb.Err()
+			if err != nil {
+				log.Fatal(err)
+			}
+			if *onlySetup || *delete {
+				stateTomb.Wait()
+				if *delete {
+					err = deleteCacheIfExists()
+					if err != nil {
+						log.Errorf("while deleting cache got %s", err.Error())
+					}
+					log.Info("deleted all cf config")
+
+				} else {
+					log.Info("setup complete")
+				}
+			}
+			stateTomb.Kill(nil)
+			return
 		case <-dispatchTomb.Dying():
 			workerTomb.Kill(nil)
+			stateTomb.Kill(nil)
 			log.Fatal("dispatch is dying")
+
+		case <-stateTomb.Dying():
+			workerTomb.Kill(nil)
+			dispatchTomb.Kill(nil)
+			log.Fatal("state routine is dying")
 		}
 	}
 

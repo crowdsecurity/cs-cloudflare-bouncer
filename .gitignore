@@ -1,5 +1,21 @@
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
 # vscode
 .vscode
+
+# ignore make things 
+cs-cloudflare-bouncer.tgz
+cs-cloudflare-bouncer*/
+
+# ignore cache
+cache.json
 
 # Binaries for programs and plugins
 *.exe
@@ -7,6 +23,7 @@
 *.dll
 *.so
 *.dylib
+
 
 # Test binary, built with `go test -c`
 *.test

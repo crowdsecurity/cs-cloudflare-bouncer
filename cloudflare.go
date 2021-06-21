@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	"github.com/prometheus/client_golang/prometheus"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -26,24 +27,19 @@ type ZoneLock struct {
 }
 
 type IPListState struct {
-	ipList   *cloudflare.IPList
-	itemByIP map[string]cloudflare.IPListItem
+	IPList   *cloudflare.IPList
+	ItemByIP map[string]cloudflare.IPListItem
 }
 
 // one firewall rule per zone.
 type CloudflareState struct {
-	filterIDByZoneID    map[string]string // this contains all the zone ID -> filter ID which represent this state
-	currExpr            string
-	ipListState         IPListState
-	countrySet          map[string]struct{}
-	autonomousSystemSet map[string]struct{}
-}
-
-func (s *CloudflareState) Init() {
-	s.filterIDByZoneID = make(map[string]string)
-	s.ipListState = IPListState{itemByIP: make(map[string]cloudflare.IPListItem)}
-	s.countrySet = make(map[string]struct{})
-	s.autonomousSystemSet = make(map[string]struct{})
+	Action              string
+	AccountID           string
+	FilterIDByZoneID    map[string]string // this contains all the zone ID -> filter ID which represent this state
+	CurrExpr            string
+	IPListState         IPListState
+	CountrySet          map[string]struct{}
+	AutonomousSystemSet map[string]struct{}
 }
 
 func setToExprList(set map[string]struct{}, quotes bool) string {
@@ -61,22 +57,32 @@ func setToExprList(set map[string]struct{}, quotes bool) string {
 	return fmt.Sprintf("{%s}", strings.Join(items, " "))
 }
 
+func allZonesHaveAction(zones []ZoneConfig, action string) bool {
+	allSupport := true
+	for _, zone := range zones {
+		if _, allSupport = zone.ActionSet[action]; !allSupport {
+			break
+		}
+	}
+	return allSupport
+}
+
 func (cfState CloudflareState) computeExpression() string {
 	var countryExpr, ASExpr, ipExpr string
 	buff := make([]string, 0)
 
-	if len(cfState.countrySet) > 0 {
-		countryExpr = fmt.Sprintf("(ip.geoip.country in %s)", setToExprList(cfState.countrySet, true))
+	if len(cfState.CountrySet) > 0 {
+		countryExpr = fmt.Sprintf("(ip.geoip.country in %s)", setToExprList(cfState.CountrySet, true))
 		buff = append(buff, countryExpr)
 	}
 
-	if len(cfState.autonomousSystemSet) > 0 {
-		ASExpr = fmt.Sprintf("(ip.geoip.asnum in %s)", setToExprList(cfState.autonomousSystemSet, false))
+	if len(cfState.AutonomousSystemSet) > 0 {
+		ASExpr = fmt.Sprintf("(ip.geoip.asnum in %s)", setToExprList(cfState.AutonomousSystemSet, false))
 		buff = append(buff, ASExpr)
 	}
 
-	if cfState.ipListState.ipList != nil {
-		ipExpr = fmt.Sprintf("(ip.src in $%s)", cfState.ipListState.ipList.Name)
+	if cfState.IPListState.IPList != nil {
+		ipExpr = fmt.Sprintf("(ip.src in $%s)", cfState.IPListState.IPList.Name)
 		buff = append(buff, ipExpr)
 	}
 
@@ -87,18 +93,19 @@ func (cfState CloudflareState) computeExpression() string {
 // different than the previous rule.
 func (cfState *CloudflareState) UpdateExpr() bool {
 	computedExpr := cfState.computeExpression()
-	isNew := computedExpr != cfState.currExpr
-	cfState.currExpr = computedExpr
+	isNew := computedExpr != cfState.CurrExpr
+	cfState.CurrExpr = computedExpr
 	return isNew
 }
 
 type CloudflareWorker struct {
 	Logger                  *log.Entry
-	Account                 CloudflareAccount
+	Account                 AccountConfig
 	ZoneLocks               []ZoneLock
-	CloudflareStateByAction map[string]*CloudflareState
+	CFStateByAction         map[string]*CloudflareState
 	Ctx                     context.Context
 	LAPIStream              chan *models.DecisionsStreamResponse
+	UpdatedState            chan map[string]*CloudflareState
 	UpdateFrequency         time.Duration
 	NewIPDecisions          []*models.Decision
 	ExpiredIPDecisions      []*models.Decision
@@ -108,6 +115,7 @@ type CloudflareWorker struct {
 	ExpiredCountryDecisions []*models.Decision
 	API                     cloudflareAPI
 	Wg                      *sync.WaitGroup
+	Count                   prometheus.Counter
 }
 
 type cloudflareAPI interface {
@@ -123,14 +131,6 @@ type cloudflareAPI interface {
 	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error)
 	DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
-}
-
-func extractZoneIDs(zones []CloudflareZone) []string {
-	zoneIDs := make([]string, len(zones))
-	for i, zone := range zones {
-		zoneIDs[i] = zone.ID
-	}
-	return zoneIDs
 }
 
 func min(a int, b int) int {
@@ -157,7 +157,7 @@ func normalizeIP(ip string) string {
 
 // Helper which removes dups and splits decisions according to their action.
 // Decisions with unsupported action are ignored
-func classifyDecisionsByAction(decisions []*models.Decision) map[string][]*models.Decision {
+func dedupAndClassifyDecisionsByAction(decisions []*models.Decision) map[string][]*models.Decision {
 	decisionValueSet := make(map[string]struct{})
 	decisonsByAction := make(map[string][]*models.Decision)
 	tmpDefaulted := make([]*models.Decision, 0)
@@ -171,9 +171,11 @@ func classifyDecisionsByAction(decisions []*models.Decision) map[string][]*model
 			// unsupported decision type, ignore this if in case decision with supported action
 			// for the same decision value is present.
 			tmpDefaulted = append(tmpDefaulted, decision)
+			continue
+		} else {
+			decisionValueSet[*decision.Value] = struct{}{}
 		}
 		decisonsByAction[action] = append(decisonsByAction[action], decision)
-		decisionValueSet[*decision.Value] = struct{}{}
 	}
 	defaulted := make([]*models.Decision, 0)
 	for _, decision := range tmpDefaulted {
@@ -187,6 +189,7 @@ func classifyDecisionsByAction(decisions []*models.Decision) map[string][]*model
 	return decisonsByAction
 }
 
+// getters
 func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, error) {
 	for _, zoneLock := range worker.ZoneLocks {
 		if zoneLock.ZoneID == zoneID {
@@ -196,7 +199,12 @@ func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, er
 	return nil, fmt.Errorf("zone lock for the zone id %s not found", zoneID)
 }
 
-func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs []string) error {
+func (worker *CloudflareWorker) getAPI() cloudflareAPI {
+	worker.Count.Inc()
+	return worker.API
+}
+
+func (worker *CloudflareWorker) deleteRulesContainingStringFromZoneIDs(str string, zonesIDs []string) error {
 	for _, zoneID := range zonesIDs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneID})
 		zoneLock, err := worker.getMutexByZoneID(zoneID)
@@ -204,7 +212,7 @@ func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs
 			zoneLock.Lock()
 			defer zoneLock.Unlock()
 		}
-		rules, err := worker.API.FirewallRules(worker.Ctx, zoneID, cloudflare.PaginationOptions{})
+		rules, err := worker.getAPI().FirewallRules(worker.Ctx, zoneID, cloudflare.PaginationOptions{})
 		if err != nil {
 			return err
 		}
@@ -216,7 +224,7 @@ func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs
 			}
 		}
 		if len(deleteRules) > 0 {
-			err = worker.API.DeleteFirewallRules(worker.Ctx, zoneID, deleteRules)
+			err = worker.getAPI().DeleteFirewallRules(worker.Ctx, zoneID, deleteRules)
 			if err != nil {
 				return err
 			}
@@ -227,7 +235,7 @@ func (worker *CloudflareWorker) deleteRulesContainingString(str string, zonesIDs
 	return nil
 }
 
-func (worker *CloudflareWorker) deleteFiltersContainingString(str string, zonesIDs []string) error {
+func (worker *CloudflareWorker) deleteFiltersContainingStringFromZoneIDs(str string, zonesIDs []string) error {
 	for _, zoneID := range zonesIDs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneID})
 		zoneLock, err := worker.getMutexByZoneID(zoneID)
@@ -235,7 +243,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingString(str string, zonesI
 			zoneLock.Lock()
 			defer zoneLock.Unlock()
 		}
-		filters, err := worker.API.Filters(worker.Ctx, zoneID, cloudflare.PaginationOptions{})
+		filters, err := worker.getAPI().Filters(worker.Ctx, zoneID, cloudflare.PaginationOptions{})
 		if err != nil {
 			return err
 		}
@@ -249,7 +257,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingString(str string, zonesI
 
 		if len(deleteFilters) > 0 {
 			zoneLogger.Infof("deleting %d filters", len(deleteFilters))
-			err = worker.API.DeleteFilters(worker.Ctx, zoneID, deleteFilters)
+			err = worker.getAPI().DeleteFilters(worker.Ctx, zoneID, deleteFilters)
 			if err != nil {
 				return err
 			}
@@ -260,13 +268,13 @@ func (worker *CloudflareWorker) deleteFiltersContainingString(str string, zonesI
 }
 
 func (worker *CloudflareWorker) deleteExistingIPList() error {
-	IPLists, err := worker.API.ListIPLists(worker.Ctx)
+	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, state := range worker.CloudflareStateByAction {
-		IPList := state.ipListState.ipList
+	for _, state := range worker.CFStateByAction {
+		IPList := state.IPListState.IPList
 		id := worker.getIPListID(IPList.Name, IPLists) // requires ip list name
 		if id == nil {
 			worker.Logger.Infof("ip list %s does not exists", IPList.Name)
@@ -279,7 +287,7 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 			return err
 		}
 
-		_, err = worker.API.DeleteIPList(worker.Ctx, *id)
+		_, err = worker.getAPI().DeleteIPList(worker.Ctx, *id)
 		if err != nil {
 			return err
 		}
@@ -288,23 +296,24 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 }
 
 func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) error {
-	zones, err := worker.API.ListZones(worker.Ctx)
-	zoneIDs := make([]string, len(zones))
-	for i, zone := range zones {
-		zoneIDs[i] = zone.ID
-	}
-	worker.Logger.Debugf("found %d zones on this account", len(zones))
+	zones, err := worker.getAPI().ListZones(worker.Ctx)
 	if err != nil {
 		return err
 	}
 
-	err = worker.deleteRulesContainingString(fmt.Sprintf("$%s", IPListName), extractZoneIDs(worker.Account.Zones))
+	zoneIDs := make([]string, len(zones))
+	for i, zone := range zones {
+		zoneIDs[i] = zone.ID
+	}
+
+	worker.Logger.Debugf("found %d zones on this account", len(zones))
+	err = worker.deleteRulesContainingStringFromZoneIDs(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
 	}
 	// A Filter can exist on it's own, they are not visible on UI, they are API only.
 	// Clear these Filters.
-	err = worker.deleteFiltersContainingString(fmt.Sprintf("$%s", IPListName), extractZoneIDs(worker.Account.Zones))
+	err = worker.deleteFiltersContainingStringFromZoneIDs(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
 	}
@@ -326,32 +335,32 @@ func (worker *CloudflareWorker) setUpIPList() error {
 		return err
 	}
 
-	for action, state := range worker.CloudflareStateByAction {
-		ipList := *state.ipListState.ipList
-		tmp, err := worker.API.CreateIPList(worker.Ctx, ipList.Name, fmt.Sprintf("%s IP list by crowdsec", action), "ip")
+	for action, state := range worker.CFStateByAction {
+		ipList := *state.IPListState.IPList
+		tmp, err := worker.getAPI().CreateIPList(worker.Ctx, ipList.Name, fmt.Sprintf("%s IP list by crowdsec", action), "ip")
 		if err != nil {
 			return err
 		}
-		*worker.CloudflareStateByAction[action].ipListState.ipList = tmp
-		worker.CloudflareStateByAction[action].ipListState.itemByIP = make(map[string]cloudflare.IPListItem)
-		worker.CloudflareStateByAction[action].UpdateExpr()
+		*worker.CFStateByAction[action].IPListState.IPList = tmp
+		worker.CFStateByAction[action].IPListState.ItemByIP = make(map[string]cloudflare.IPListItem)
+		worker.CFStateByAction[action].UpdateExpr()
 
 	}
 	return nil
 }
 
-func (worker *CloudflareWorker) SetUpRules() error {
-	for _, zone := range worker.Account.Zones {
+func (worker *CloudflareWorker) setUpRules() error {
+	for _, zone := range worker.Account.ZoneConfigs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for _, action := range zone.Actions {
-			ruleExpression := worker.CloudflareStateByAction[action].currExpr
+			ruleExpression := worker.CFStateByAction[action].CurrExpr
 			firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: ruleExpression}, Action: action, Description: fmt.Sprintf("CrowdSec %s rule", action)}}
-			rule, err := worker.API.CreateFirewallRules(worker.Ctx, zone.ID, firewallRules)
+			rule, err := worker.getAPI().CreateFirewallRules(worker.Ctx, zone.ID, firewallRules)
 			if err != nil {
 				worker.Logger.WithFields(log.Fields{"zone_id": zone.ID}).Errorf("error %s in creating firewall rule %s", err.Error(), ruleExpression)
 				return err
 			}
-			worker.CloudflareStateByAction[action].filterIDByZoneID[zone.ID] = rule[0].Filter.ID
+			worker.CFStateByAction[action].FilterIDByZoneID[zone.ID] = rule[0].Filter.ID
 		}
 		zoneLogger.Info("firewall rules created")
 	}
@@ -360,80 +369,160 @@ func (worker *CloudflareWorker) SetUpRules() error {
 }
 
 func (worker *CloudflareWorker) AddNewIPs() error {
-	decisonsByAction := classifyDecisionsByAction(worker.NewIPDecisions)
-	for action, state := range worker.CloudflareStateByAction {
-		if _, ok := decisonsByAction[action]; !ok {
-			// TODO: send it to default IP list
-			continue
+	// IP decisions are applied at account level
+	decisonsByAction := dedupAndClassifyDecisionsByAction(worker.NewIPDecisions)
+	for action, decisions := range decisonsByAction {
+		// In case some zones support this action and others don't,  we put this in account's default action.
+		if !allZonesHaveAction(worker.Account.ZoneConfigs, action) {
+			if worker.Account.DefaultAction == "none" {
+				worker.Logger.Debugf("dropping IP decisions with unsupported action %s", action)
+				continue
+			}
+			action = worker.Account.DefaultAction
+			worker.Logger.Debugf("ip action defaulted to %s", action)
 		}
+		state := worker.CFStateByAction[action]
 		newIPs := make([]cloudflare.IPListItemCreateRequest, 0)
-		for _, decision := range decisonsByAction[action] {
+		for _, decision := range decisions {
 			// check if ip already exists in state. Send if not exists.
-			if _, ok := state.ipListState.itemByIP[*decision.Value]; !ok {
+			ip := normalizeIP(*decision.Value)
+			if _, ok := state.IPListState.ItemByIP[ip]; !ok {
 				newIPs = append(newIPs, cloudflare.IPListItemCreateRequest{
-					IP:      normalizeIP(*decision.Value),
+					IP:      ip,
 					Comment: *decision.Scenario,
 				})
+				worker.CFStateByAction[action].IPListState.IPList.NumItems++
 			}
 		}
 		if len(newIPs) > 0 {
-			items, err := worker.API.CreateIPListItems(worker.Ctx, state.ipListState.ipList.ID, newIPs)
+			items, err := worker.getAPI().CreateIPListItems(worker.Ctx, state.IPListState.IPList.ID, newIPs)
 			if err != nil {
 				return err
 			}
 			worker.Logger.Infof("banned %d IPs", len(newIPs))
 			for _, item := range items {
-				worker.CloudflareStateByAction[action].ipListState.itemByIP[item.IP] = item
+				worker.CFStateByAction[action].IPListState.ItemByIP[item.IP] = item
 			}
 		}
+
 	}
+	go func() { worker.UpdatedState <- worker.CFStateByAction }()
 	worker.NewIPDecisions = make([]*models.Decision, 0)
 	return nil
 }
 
 func (worker *CloudflareWorker) DeleteIPs() error {
-	decisonsByAction := classifyDecisionsByAction(worker.ExpiredIPDecisions)
-	for action, state := range worker.CloudflareStateByAction {
-		if _, ok := decisonsByAction[action]; !ok {
-			//TODO: look for in default IPList. Every zone has different default so decide it.
-			continue
+	// IP decisions are applied at account level
+	decisonsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredIPDecisions)
+	for action, decisions := range decisonsByAction {
+		// In case some zones support this action and others don't,  we put this in account's default action.
+		if !allZonesHaveAction(worker.Account.ZoneConfigs, action) {
+			if worker.Account.DefaultAction == "none" {
+				worker.Logger.Debugf("dropping IP delete decisions with unsupported action %s", action)
+				continue
+			}
+			action = worker.Account.DefaultAction
+			worker.Logger.Debugf("ip delete action defaulted to %s", action)
+
 		}
-		deleteIPs := cloudflare.IPListItemDeleteRequest{}
-		for _, IPDeletedecision := range decisonsByAction[action] {
-			if item, ok := state.ipListState.itemByIP[*IPDeletedecision.Value]; ok {
+		state := worker.CFStateByAction[action]
+		deleteIPs := cloudflare.IPListItemDeleteRequest{Items: make([]cloudflare.IPListItemDeleteItemRequest, 0)}
+		for _, decision := range decisions {
+			// delete only if ip already exists in state.
+			ip := normalizeIP(*decision.Value)
+			if item, ok := state.IPListState.ItemByIP[ip]; ok {
 				deleteIPs.Items = append(deleteIPs.Items, cloudflare.IPListItemDeleteItemRequest{ID: item.ID})
 			}
 		}
+
 		if len(deleteIPs.Items) > 0 {
-			deadItems, err := worker.API.DeleteIPListItems(worker.Ctx, state.ipListState.ipList.ID, deleteIPs)
+			_, err := worker.getAPI().DeleteIPListItems(worker.Ctx, state.IPListState.IPList.ID, deleteIPs)
 			if err != nil {
 				return err
 			}
-			for _, item := range deadItems {
-				delete(worker.CloudflareStateByAction[action].ipListState.itemByIP, item.IP)
+			worker.CFStateByAction[action].IPListState.IPList.NumItems -= len(deleteIPs.Items)
+			ipByID := make(map[string]string)
+			for ip, item := range worker.CFStateByAction[action].IPListState.ItemByIP {
+				ipByID[item.ID] = ip
 			}
-			worker.Logger.Infof("removed %d IP bans", len(deleteIPs.Items))
+			for _, item := range deleteIPs.Items {
+				delete(worker.CFStateByAction[action].IPListState.ItemByIP, ipByID[item.ID])
+			}
+		}
+
+	}
+	go func() { worker.UpdatedState <- worker.CFStateByAction }()
+	worker.ExpiredIPDecisions = make([]*models.Decision, 0)
+	return nil
+}
+
+func (worker *CloudflareWorker) stateIsNew() bool {
+
+	isNew := false
+	for _, action := range worker.CFStateByAction {
+		// this means that ip list is not created, hence the state is new.
+		if action.IPListState.IPList.CreatedOn == nil {
+			isNew = true
+			break
 		}
 	}
-	worker.ExpiredIPDecisions = make([]*models.Decision, 0)
+	return isNew
+}
+
+func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
+
+	defer func() { worker.UpdatedState <- worker.CFStateByAction }()
+
+	if !worker.stateIsNew() {
+		worker.Logger.Info("state hasn't changed, not setting up CF")
+		return nil
+	}
+
+	err := worker.setUpIPList()
+	if err != nil {
+		worker.Logger.Errorf("error %s in creating IP List", err.Error())
+		return err
+	}
+
+	worker.Logger.Debug("ip list setup complete")
+	err = worker.setUpRules()
+	if err != nil {
+		worker.Logger.Error(err.Error())
+		return err
+	}
 	return nil
 }
 
 func (worker *CloudflareWorker) Init() error {
 
 	defer worker.Wg.Done()
+	defer func() { worker.UpdatedState <- worker.CFStateByAction }()
+
 	var err error
 
 	worker.Logger = log.WithFields(log.Fields{"account_id": worker.Account.ID})
 	worker.NewIPDecisions = make([]*models.Decision, 0)
 	worker.ExpiredIPDecisions = make([]*models.Decision, 0)
-	worker.CloudflareStateByAction = make(map[string]*CloudflareState)
 
-	if worker.API == nil {
+	if worker.API == nil { // this for easy swapping during tests
 		worker.API, err = cloudflare.NewWithAPIToken(worker.Account.Token, cloudflare.UsingAccount(worker.Account.ID))
 	}
+	if err != nil {
+		worker.Logger.Error(err.Error())
+		return err
+	}
+	worker.Logger.Debug("setup of API complete")
+
+	if len(worker.CFStateByAction) != 0 {
+		// no  need to  setup ip lists and rules, since cache is being used.
+		return nil
+	}
+
+	worker.CFStateByAction = make(map[string]*CloudflareState)
+
 	zones, err := worker.API.ListZones(worker.Ctx)
 	if err != nil {
+		worker.Logger.Error(err.Error())
 		return err
 	}
 	zoneByID := make(map[string]cloudflare.Zone)
@@ -441,117 +530,87 @@ func (worker *CloudflareWorker) Init() error {
 		zoneByID[zone.ID] = zone
 	}
 
-	for _, z := range worker.Account.Zones {
+	for _, z := range worker.Account.ZoneConfigs {
 		if zone, ok := zoneByID[z.ID]; ok {
 			// FIXME this is probably wrong.
 			if !zone.Plan.IsSubscribed && len(z.Actions) > 1 {
-				return fmt.Errorf("zone %s 's plan doesn't support multiple remediations", z.ID)
+				return fmt.Errorf("zone %s 's plan doesn't support multiple actionss", z.ID)
 			}
 
 			for _, action := range z.Actions {
 				listName := fmt.Sprintf("%s_%s", worker.Account.IPListPrefix, action)
-				worker.CloudflareStateByAction[action] = &CloudflareState{ipListState: IPListState{ipList: &cloudflare.IPList{Name: listName}}}
-				worker.CloudflareStateByAction[action].filterIDByZoneID = make(map[string]string)
-				worker.CloudflareStateByAction[action].countrySet = make(map[string]struct{})
-				worker.CloudflareStateByAction[action].autonomousSystemSet = make(map[string]struct{})
+				worker.CFStateByAction[action] = &CloudflareState{
+					AccountID:   worker.Account.ID,
+					Action:      action,
+					IPListState: IPListState{IPList: &cloudflare.IPList{Name: listName}, ItemByIP: make(map[string]cloudflare.IPListItem)},
+				}
+				worker.CFStateByAction[action].FilterIDByZoneID = make(map[string]string)
+				worker.CFStateByAction[action].CountrySet = make(map[string]struct{})
+				worker.CFStateByAction[action].AutonomousSystemSet = make(map[string]struct{})
 
 			}
 		} else {
 			return fmt.Errorf("account %s doesn't have access to one %s", worker.Account.ID, z.ID)
 		}
 	}
-	worker.Logger.Debug("setup of API complete")
-	err = worker.setUpIPList()
-
-	if err != nil {
-		worker.Logger.Errorf("error %s in creating IP List", err.Error())
-		return err
-	}
-
-	worker.Logger.Debug("ip list setup complete")
-	err = worker.SetUpRules()
-	if err != nil {
-		worker.Logger.Error(err.Error())
-		return err
-	}
 	return err
 }
 
-func (worker *CloudflareWorker) CleanUp() {
-	worker.Logger.Error("stopping")
+func (worker *CloudflareWorker) getContainerByDecisionScope(scope string, decisionIsExpired bool) (*([]*models.Decision), error) {
+	var containerByDecisionScope map[string]*([]*models.Decision)
+	if decisionIsExpired {
+		containerByDecisionScope = map[string]*([]*models.Decision){
+			"IP":      &worker.ExpiredIPDecisions,
+			"RANGE":   &worker.ExpiredIPDecisions, // Cloudflare IP lists handle ranges fine
+			"COUNTRY": &worker.ExpiredCountryDecisions,
+			"AS":      &worker.ExpiredASDecisions,
+		}
+	} else {
+		containerByDecisionScope = map[string]*([]*models.Decision){
+			"IP":      &worker.NewIPDecisions,
+			"RANGE":   &worker.NewIPDecisions, // Cloudflare IP lists handle ranges fine
+			"COUNTRY": &worker.NewCountryDecisions,
+			"AS":      &worker.NewASDecisions,
+		}
+	}
+	scope = strings.ToUpper(scope)
+	if container, ok := containerByDecisionScope[scope]; !ok {
+		return nil, fmt.Errorf("%s scope is not supported", scope)
+	} else {
+		return container, nil
+	}
+}
+func (worker *CloudflareWorker) insertDecision(decision *models.Decision, decisionIsExpired bool) {
+	container, err := worker.getContainerByDecisionScope(*decision.Scope, decisionIsExpired)
+	if err != nil {
+		worker.Logger.Debugf("ignored new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
+		return
+	}
+	*container = append(*container, decision)
 }
 
 func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.DecisionsStreamResponse) {
 	worker.Logger.Infof("received %d decisions, %d are new , %d are expired",
 		len(streamDecision.New)+len(streamDecision.Deleted), len(streamDecision.New), len(streamDecision.Deleted),
 	)
-
 	for _, decision := range streamDecision.New {
-		catched := true
-		*decision.Type = strings.ToLower(*decision.Type)
-		switch scope := strings.ToUpper(*decision.Scope); scope {
-		case "IP", "RANGE":
-			worker.NewIPDecisions = append(worker.NewIPDecisions, decision)
-
-		case "COUNTRY":
-			worker.NewCountryDecisions = append(worker.NewCountryDecisions, decision)
-
-		case "AS":
-			worker.NewASDecisions = append(worker.NewASDecisions, decision)
-
-		default:
-			catched = false
-		}
-		if catched {
-			worker.Logger.Debugf("received new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
-		} else {
-			// TODO: once we start explictly specifying the decisions we're interested in, this won't be needed
-			worker.Logger.Debugf("ignored new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
-		}
-
+		worker.insertDecision(decision, false)
 	}
-
 	for _, decision := range streamDecision.Deleted {
-		catched := true
-		switch scope := strings.ToUpper(*decision.Scope); scope {
-		case "IP", "RANGE":
-			worker.ExpiredIPDecisions = append(worker.ExpiredIPDecisions, decision)
-
-		case "COUNTRY":
-			worker.ExpiredCountryDecisions = append(worker.ExpiredCountryDecisions, decision)
-
-		case "AS":
-			worker.ExpiredASDecisions = append(worker.ExpiredASDecisions, decision)
-
-		default:
-			catched = false
-		}
-
-		if catched {
-			worker.Logger.Debugf("received expired decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
-		} else {
-			// TODO: once we start explictly specifying the decisions we're interested in, this won't be needed
-			worker.Logger.Debugf("ignored expired decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
-		}
+		worker.insertDecision(decision, true)
 	}
-
 }
 
 func (worker *CloudflareWorker) SendASBans() error {
-	decisionsByAction := classifyDecisionsByAction(worker.NewASDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.NewASDecisions)
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
-				if _, ok := worker.CloudflareStateByAction[action].autonomousSystemSet[*decision.Value]; !ok {
+				if _, ok := worker.CFStateByAction[action].AutonomousSystemSet[*decision.Value]; !ok {
 					zoneLogger.Debugf("found new AS ban for %s", *decision.Value)
-					worker.CloudflareStateByAction[action].autonomousSystemSet[*decision.Value] = struct{}{}
+					worker.CFStateByAction[action].AutonomousSystemSet[*decision.Value] = struct{}{}
 				}
 			}
 		}
@@ -561,20 +620,15 @@ func (worker *CloudflareWorker) SendASBans() error {
 }
 
 func (worker *CloudflareWorker) DeleteASBans() error {
-	decisionsByAction := classifyDecisionsByAction(worker.ExpiredASDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredASDecisions)
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
-				if _, ok := worker.CloudflareStateByAction[action].autonomousSystemSet[*decision.Value]; ok {
+				if _, ok := worker.CFStateByAction[action].AutonomousSystemSet[*decision.Value]; ok {
 					zoneLogger.Debugf("found expired AS ban for %s", *decision.Value)
-					delete(worker.CloudflareStateByAction[action].autonomousSystemSet, *decision.Value)
+					delete(worker.CFStateByAction[action].AutonomousSystemSet, *decision.Value)
 				}
 			}
 		}
@@ -583,21 +637,27 @@ func (worker *CloudflareWorker) DeleteASBans() error {
 	return nil
 }
 
+func (worker *CloudflareWorker) normalizeActionForZone(action string, zoneCfg ZoneConfig) string {
+	zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
+	if _, spAction := zoneCfg.ActionSet[action]; action == "defaulted" || !spAction {
+		if action != "defaulted" {
+			zoneLogger.Debugf("defaulting %s action to %s action", action, zoneCfg.Actions[0])
+		}
+		action = zoneCfg.Actions[0]
+	}
+	return action
+}
+
 func (worker *CloudflareWorker) SendCountryBans() error {
-	decisionsByAction := classifyDecisionsByAction(worker.NewCountryDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.NewCountryDecisions)
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
-				if _, ok := worker.CloudflareStateByAction[action].countrySet[*decision.Value]; !ok {
-					zoneLogger.Debugf("found new countrys ban for %s", *decision.Value)
-					worker.CloudflareStateByAction[action].countrySet[*decision.Value] = struct{}{}
+				if _, ok := worker.CFStateByAction[action].CountrySet[*decision.Value]; !ok {
+					zoneLogger.Debugf("found new country ban for %s", *decision.Value)
+					worker.CFStateByAction[action].CountrySet[*decision.Value] = struct{}{}
 				}
 			}
 		}
@@ -607,20 +667,15 @@ func (worker *CloudflareWorker) SendCountryBans() error {
 }
 
 func (worker *CloudflareWorker) DeleteCountryBans() error {
-	decisionsByAction := classifyDecisionsByAction(worker.ExpiredCountryDecisions)
-	for _, zone := range worker.Account.Zones {
-		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
+	decisionsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredCountryDecisions)
+	for _, zoneCfg := range worker.Account.ZoneConfigs {
+		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 		for action, decisions := range decisionsByAction {
-			if _, spAction := zone.ActionSet[action]; action == "defaulted" || !spAction {
-				if action != "defaulted" {
-					zoneLogger.Debugf("defaulting %s action to %s action", action, zone.Actions[0])
-				}
-				action = zone.Actions[0]
-			}
+			action = worker.normalizeActionForZone(action, zoneCfg)
 			for _, decision := range decisions {
-				if _, ok := worker.CloudflareStateByAction[action].countrySet[*decision.Value]; ok {
+				if _, ok := worker.CFStateByAction[action].CountrySet[*decision.Value]; ok {
 					zoneLogger.Debugf("found expired country ban for %s", *decision.Value)
-					delete(worker.CloudflareStateByAction[action].countrySet, *decision.Value)
+					delete(worker.CFStateByAction[action].CountrySet, *decision.Value)
 				}
 			}
 		}
@@ -629,22 +684,24 @@ func (worker *CloudflareWorker) DeleteCountryBans() error {
 	return nil
 }
 func (worker *CloudflareWorker) UpdateRules() error {
-	for action, state := range worker.CloudflareStateByAction {
-		if !worker.CloudflareStateByAction[action].UpdateExpr() {
+	stateIsNew := false
+	for action, state := range worker.CFStateByAction {
+		if !worker.CFStateByAction[action].UpdateExpr() {
 			// expression is still same, why bother.
-			worker.Logger.Debugf("rule for %s action is unchanged", action)
+			worker.Logger.Infof("rule for %s action is unchanged", action)
 			continue
 		}
-		for _, zone := range worker.Account.Zones {
+		stateIsNew = true
+		for _, zone := range worker.Account.ZoneConfigs {
 			zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 			updatedFilters := make([]cloudflare.Filter, 0)
 			if _, ok := zone.ActionSet[action]; ok {
 				// check whether this action is supported by this zone
-				updatedFilters = append(updatedFilters, cloudflare.Filter{ID: state.filterIDByZoneID[zone.ID], Expression: state.currExpr})
+				updatedFilters = append(updatedFilters, cloudflare.Filter{ID: state.FilterIDByZoneID[zone.ID], Expression: state.CurrExpr})
 			}
 			if len(updatedFilters) > 0 {
-				zoneLogger.Debugf("updating %d rules", len(updatedFilters))
-				_, err := worker.API.UpdateFilters(worker.Ctx, zone.ID, updatedFilters)
+				zoneLogger.Infof("updating %d rules", len(updatedFilters))
+				_, err := worker.getAPI().UpdateFilters(worker.Ctx, zone.ID, updatedFilters)
 				if err != nil {
 					return err
 				}
@@ -653,16 +710,25 @@ func (worker *CloudflareWorker) UpdateRules() error {
 			}
 		}
 	}
+	if stateIsNew {
+		go func() { worker.UpdatedState <- worker.CFStateByAction }()
+	}
 	return nil
 }
 
 func (worker *CloudflareWorker) Run() error {
-	defer worker.CleanUp()
 	err := worker.Init()
 	if err != nil {
 		worker.Logger.Error(err.Error())
 		return err
 	}
+
+	err = worker.SetUpCloudflareIfNewState()
+	if err != nil {
+		worker.Logger.Error(err.Error())
+		return err
+	}
+
 	worker.Logger.Info("waiting for other workers")
 	worker.Wg.Wait()
 	ticker := time.NewTicker(worker.UpdateFrequency)
@@ -691,7 +757,7 @@ func (worker *CloudflareWorker) Run() error {
 				worker.Logger.Debug("no new IP decisions")
 			}
 
-			if len(worker.ExpiredCountryDecisions) > 1 {
+			if len(worker.ExpiredCountryDecisions) > 0 {
 				worker.Logger.Debug("processing expired country decisions")
 				err = worker.DeleteCountryBans()
 				if err != nil {
@@ -732,6 +798,7 @@ func (worker *CloudflareWorker) Run() error {
 			}
 			err := worker.UpdateRules()
 			if err != nil {
+				worker.Logger.Error(err)
 				return err
 			}
 

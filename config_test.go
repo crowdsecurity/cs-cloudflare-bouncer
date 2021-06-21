@@ -26,20 +26,21 @@ func TestNewConfig(t *testing.T) {
 				CrowdSecLAPIKey:             "${LAPI_KEY}",
 				CrowdsecUpdateFrequencyYAML: "10s",
 				CloudflareConfig: CloudflareConfig{
-					Accounts: []CloudflareAccount{
+					Accounts: []AccountConfig{
 						{
 							ID: "${CF_ACC_ID}",
-							Zones: []CloudflareZone{
+							ZoneConfigs: []ZoneConfig{
 								{
 									ID:      "${CF_ZONE_ID}",
 									Actions: []string{"block"},
 									ActionSet: map[string]struct{}{
-										"block": struct{}{},
+										"block": {},
 									},
 								},
 							},
-							Token:        "${CF_TOKEN}",
-							IPListPrefix: "crowdsec",
+							Token:         "${CF_TOKEN}",
+							IPListPrefix:  "crowdsec",
+							DefaultAction: "challenge",
 						},
 					},
 					UpdateFrequency: time.Second * 30,
