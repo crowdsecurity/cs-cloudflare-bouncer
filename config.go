@@ -20,15 +20,15 @@ type ZoneConfig struct {
 	ActionSet map[string]struct{} `yaml:",omitempty"`
 }
 type AccountConfig struct {
-	ID            string           `yaml:"id"`
-	ZoneConfigs         []ZoneConfig `yaml:"zones"`
-	Token         string           `yaml:"token"`
-	IPListPrefix  string           `yaml:"ip_list_prefix"`
-	DefaultAction string           `yaml:"default_action"`
+	ID            string       `yaml:"id"`
+	ZoneConfigs   []ZoneConfig `yaml:"zones"`
+	Token         string       `yaml:"token"`
+	IPListPrefix  string       `yaml:"ip_list_prefix"`
+	DefaultAction string       `yaml:"default_action"`
 }
 type CloudflareConfig struct {
 	Accounts        []AccountConfig `yaml:"accounts"`
-	UpdateFrequency time.Duration       `yaml:"update_frequency"`
+	UpdateFrequency time.Duration   `yaml:"update_frequency"`
 }
 
 type bouncerConfig struct {
@@ -151,10 +151,11 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		}
 		for i, account := range accounts {
 			accountConfig = append(accountConfig, AccountConfig{
-				ID:           account.ID,
-				ZoneConfigs:        make([]ZoneConfig, 0),
-				Token:        token,
-				IPListPrefix: "crowdsec",
+				ID:            account.ID,
+				ZoneConfigs:   make([]ZoneConfig, 0),
+				Token:         token,
+				IPListPrefix:  "crowdsec",
+				DefaultAction: "challenge",
 			})
 
 			api.AccountID = account.ID

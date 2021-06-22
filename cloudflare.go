@@ -475,6 +475,7 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 
 	if !worker.stateIsNew() {
 		worker.Logger.Info("state hasn't changed, not setting up CF")
+		worker.Wg.Done()
 		return nil
 	}
 
@@ -483,7 +484,8 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 		worker.Logger.Errorf("error %s in creating IP List", err.Error())
 		return err
 	}
-
+	worker.Wg.Done()
+	worker.Wg.Wait()
 	worker.Logger.Debug("ip list setup complete")
 	err = worker.setUpRules()
 	if err != nil {
@@ -495,7 +497,6 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 
 func (worker *CloudflareWorker) Init() error {
 
-	defer worker.Wg.Done()
 	defer func() { worker.UpdatedState <- worker.CFStateByAction }()
 
 	var err error
@@ -716,6 +717,16 @@ func (worker *CloudflareWorker) UpdateRules() error {
 	return nil
 }
 
+func (worker *CloudflareWorker) runProcessorOnDecisions(processor func() error, decisions []*models.Decision) {
+	if len(decisions) > 0 {
+		worker.Logger.Infof("processing decisions with scope=%s", *decisions[0].Scope)
+		err := processor()
+		if err != nil {
+			worker.Logger.Error(err)
+		}
+	}
+}
+
 func (worker *CloudflareWorker) Run() error {
 	err := worker.Init()
 	if err != nil {
@@ -729,73 +740,17 @@ func (worker *CloudflareWorker) Run() error {
 		return err
 	}
 
-	worker.Logger.Info("waiting for other workers")
-	worker.Wg.Wait()
 	ticker := time.NewTicker(worker.UpdateFrequency)
 	for {
 		select {
 		case <-ticker.C:
-			// TODO: all of the below functions can be grouped and ran in separate goroutines for better performance
+			worker.runProcessorOnDecisions(worker.DeleteIPs, worker.ExpiredIPDecisions)
+			worker.runProcessorOnDecisions(worker.AddNewIPs, worker.NewIPDecisions)
+			worker.runProcessorOnDecisions(worker.DeleteCountryBans, worker.ExpiredCountryDecisions)
+			worker.runProcessorOnDecisions(worker.SendCountryBans, worker.NewCountryDecisions)
+			worker.runProcessorOnDecisions(worker.DeleteASBans, worker.ExpiredASDecisions)
+			worker.runProcessorOnDecisions(worker.SendCountryBans, worker.NewCountryDecisions)
 
-			if len(worker.ExpiredIPDecisions) > 0 {
-				worker.Logger.Debug("processing expired IP  decisions")
-				err := worker.DeleteIPs()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no new expired IP  decisions")
-			}
-
-			if len(worker.NewIPDecisions) > 0 {
-				worker.Logger.Debug("processing new IP decisions")
-				err = worker.AddNewIPs()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no new IP decisions")
-			}
-
-			if len(worker.ExpiredCountryDecisions) > 0 {
-				worker.Logger.Debug("processing expired country decisions")
-				err = worker.DeleteCountryBans()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no expired country decisions")
-			}
-
-			if len(worker.NewCountryDecisions) > 0 {
-				worker.Logger.Debug("processing new country decisions")
-				err = worker.SendCountryBans()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no new country decisions")
-			}
-
-			if len(worker.ExpiredASDecisions) > 0 {
-				worker.Logger.Debug("processing expired AS decisions")
-				err = worker.DeleteASBans()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no expired AS decisions")
-			}
-
-			if len(worker.NewASDecisions) > 0 {
-				worker.Logger.Debug("processing new AS decisions")
-				err = worker.SendASBans()
-				if err != nil {
-					return err
-				}
-			} else {
-				worker.Logger.Debug("no new AS decisions")
-			}
 			err := worker.UpdateRules()
 			if err != nil {
 				worker.Logger.Error(err)

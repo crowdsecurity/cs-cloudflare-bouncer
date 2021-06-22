@@ -49,21 +49,17 @@ func loadCachedStates(states *[]CloudflareState) error {
 		log.Debug("no cache found")
 		return nil
 	}
-
 	f, err := os.Open(cachePath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	if err != nil {
-		return err
-	}
 	data, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
-	json.Unmarshal(data, &states)
-	return nil
+	err = json.Unmarshal(data, &states)
+	return err
 }
 
 func dumpStates(states *[]CloudflareState) error {
@@ -123,10 +119,6 @@ func main() {
 	if configPath == nil || *configPath == "" {
 		*configPath = DEFAULT_CONFIG_PATH
 	}
-	conf, err := NewConfig(*configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	if configTokens != nil && *configTokens != "" {
 		cfg, err := ConfigTokens(*configTokens, *configPath)
@@ -136,12 +128,12 @@ func main() {
 		fmt.Print(cfg)
 		return
 	}
-
-	ctx := context.Background()
+	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	ctx := context.Background()
 	csLapi := &csbouncer.StreamBouncer{
 		APIKey:         conf.CrowdSecLAPIKey,
 		APIUrl:         conf.CrowdSecLAPIUrl,
@@ -245,7 +237,6 @@ func main() {
 	var stateTomb tomb.Tomb
 
 	dispatchTomb.Go(func() error {
-		wg.Wait()
 		go csLapi.Run()
 		for {
 			decisions := <-csLapi.Stream
