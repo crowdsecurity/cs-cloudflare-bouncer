@@ -475,6 +475,7 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 
 	if !worker.stateIsNew() {
 		worker.Logger.Info("state hasn't changed, not setting up CF")
+		worker.Wg.Done()
 		return nil
 	}
 
@@ -483,7 +484,8 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 		worker.Logger.Errorf("error %s in creating IP List", err.Error())
 		return err
 	}
-
+	worker.Wg.Done()
+	worker.Wg.Wait()
 	worker.Logger.Debug("ip list setup complete")
 	err = worker.setUpRules()
 	if err != nil {
@@ -495,7 +497,6 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 
 func (worker *CloudflareWorker) Init() error {
 
-	defer worker.Wg.Done()
 	defer func() { worker.UpdatedState <- worker.CFStateByAction }()
 
 	var err error
@@ -726,7 +727,6 @@ func (worker *CloudflareWorker) runProcessorOnDecisions(processor func() error, 
 	}
 }
 
-
 func (worker *CloudflareWorker) Run() error {
 	err := worker.Init()
 	if err != nil {
@@ -740,8 +740,6 @@ func (worker *CloudflareWorker) Run() error {
 		return err
 	}
 
-	worker.Logger.Info("waiting for other workers")
-	worker.Wg.Wait()
 	ticker := time.NewTicker(worker.UpdateFrequency)
 	for {
 		select {

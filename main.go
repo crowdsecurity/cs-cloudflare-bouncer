@@ -237,7 +237,6 @@ func main() {
 	var stateTomb tomb.Tomb
 
 	dispatchTomb.Go(func() error {
-		wg.Wait()
 		go csLapi.Run()
 		for {
 			decisions := <-csLapi.Stream
