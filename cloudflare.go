@@ -749,7 +749,7 @@ func (worker *CloudflareWorker) Run() error {
 			worker.runProcessorOnDecisions(worker.DeleteCountryBans, worker.ExpiredCountryDecisions)
 			worker.runProcessorOnDecisions(worker.SendCountryBans, worker.NewCountryDecisions)
 			worker.runProcessorOnDecisions(worker.DeleteASBans, worker.ExpiredASDecisions)
-			worker.runProcessorOnDecisions(worker.SendCountryBans, worker.NewCountryDecisions)
+			worker.runProcessorOnDecisions(worker.SendASBans, worker.NewASDecisions)
 
 			err := worker.UpdateRules()
 			if err != nil {
