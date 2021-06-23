@@ -24,7 +24,7 @@ import (
 
 const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
 
-var cachePath string = "./cache.json"
+var cachePath string = "/etc/crowdsec/cs-cloudflare-bouncer/cache.json"
 
 func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
@@ -153,6 +153,8 @@ func main() {
 
 	var workerTomb tomb.Tomb
 	var serverTomb tomb.Tomb
+	var dispatchTomb tomb.Tomb
+	var stateTomb tomb.Tomb
 
 	var wg sync.WaitGroup
 	var Count prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
@@ -233,8 +235,6 @@ func main() {
 			})
 		}
 	}
-	var dispatchTomb tomb.Tomb
-	var stateTomb tomb.Tomb
 
 	dispatchTomb.Go(func() error {
 		go csLapi.Run()
