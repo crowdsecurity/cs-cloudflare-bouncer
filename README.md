@@ -55,11 +55,12 @@ cloudflare_config:
   - id: 
     token: 
     ip_list_prefix: crowdsec
+    default_action: challenge
     zones:
     - actions: 
       - challenge # valid choices are either of challenge, js_challenge, block
-      zone_id: 
-
+      zone_id:
+    
   update_frequency: 30s # the frequency to update the cloudflare IP list 
 
 # Bouncer Config
@@ -69,30 +70,59 @@ log_dir: /var/log/
 log_level: info # valid choices are either debug, info, error 
 ```
 
-## Cloudflare configuration
+## Cloudflare Configuration:
 
 **Background:** In Cloudflare, each user can have access to multiple accounts. Each account can own/access multiple zones. In this context a zone can be considered as a domain. Each domain registered with cloudflare gets a distinct `zone_id`.
 
-For each account the `id` and `token` are required.
 
 For obtaining the `token`:
-1. Sign in as a user who has access to the account.
+1. Sign in as a user who has access to the desired account.
 2. Go to [Tokens](https://dash.cloudflare.com/profile/api-tokens) and create the token. The bouncer requires the follwing permissions to function.
 ![image](https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/token_permissions.png)
 
-For automatically generating config for tokens, run the following command
+To automatically generate config for cloudflare check the  helper section below.
+
+**Note:** If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of actions. For free plan zones only one action is supported. The first action is applied as default action.
+
+# Helpers
+
+The bouncer's binary has built in helper scripts to do various operations.
+
+### Auto config generator: 
+
+Generates bouncer config by discovering all the accounts and the zones associated with provided list of tokens. 
+
+Example Usage:
+
 ```
- /usr/local/bin/cs-cloudflare-bouncer -g <TOKEN1>,<TOKEN2>..
+/usr/local/bin/cs-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... > cfg.yaml
+cat cfg.yaml  > /etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml
 ```
 
-Make changes as you like to the generated config. Then copy the output under `cloudflare_config` in your bouncer's config file.
+**Note:** This script only generates cloudflare related config. By default it refers to the config at `/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml` for crowdsec configuration. 
 
-For obtaining the account `id`, and `zone_id` manually:
+Using custom config:
+```
+/usr/local/bin/cs-cloudflare-bouncer -c ./cfg.yaml -g <TOKEN_1>,<TOKEN_2>... 
+```
 
-1. Go to each of the "domain dashboard".
-2. In the bottom left corner you would see the domain's `zone_id` and the owner account's `id`
+### Cloudflare Setup: 
 
-**Note:** If the zone is subscribed to a paid Cloudflare plan then it can be configured to support multiple types of actions. For free plan zones only one remdiation is supported. The first remdiation is applied as default actions.
+This only creates the required IP lists and firewall rules at cloudflare and exits.
+
+Example Usage:
+```
+/usr/local/bin/cs-cloudflare-bouncer -s 
+```
+
+### Cloudflare Cleanup: 
+
+This deletes all IP lists and firewall rules at cloudflare which were created by the bouncer. It also deletes the local cache. 
+
+Example Usage:
+```
+/usr/local/bin/cs-cloudflare-bouncer -d 
+```
 
 # How it works
 
@@ -101,7 +131,7 @@ to update IP lists and firewall rules depending upon the decision.
 
 
 # Troubleshooting
-
  - Logs are in `/var/log/cs-cloudflare-bouncer.log`
+ - The cache is at `/etc/crowdsec/cs-cloudflare-bouncer/cache.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
  - You can view/interact directly in the ban list either with `cscli`
  - Service can be started/stopped with `systemctl start/stop cs-cloudflare-bouncer`
