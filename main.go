@@ -133,16 +133,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
-	csLapi := &csbouncer.StreamBouncer{
-		APIKey:         conf.CrowdSecLAPIKey,
-		APIUrl:         conf.CrowdSecLAPIUrl,
-		TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
-	}
-
-	if err := csLapi.Init(); err != nil {
-		log.Fatalf(err.Error())
-	}
 
 	zoneLocks := make([]ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
@@ -236,16 +228,26 @@ func main() {
 		}
 	}
 
-	dispatchTomb.Go(func() error {
-		go csLapi.Run()
-		for {
-			decisions := <-csLapi.Stream
-			// broadcast decision to each worker
-			for _, lapiStream := range lapiStreams {
-				lapiStream <- decisions
-			}
+	if !*onlySetup && !*delete {
+		csLAPI = &csbouncer.StreamBouncer{
+			APIKey:         conf.CrowdSecLAPIKey,
+			APIUrl:         conf.CrowdSecLAPIUrl,
+			TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
 		}
-	})
+		if err := csLAPI.Init(); err != nil {
+			log.Fatalf(err.Error())
+		}
+		dispatchTomb.Go(func() error {
+			go csLAPI.Run()
+			for {
+				decisions := <-csLAPI.Stream
+				// broadcast decision to each worker
+				for _, lapiStream := range lapiStreams {
+					lapiStream <- decisions
+				}
+			}
+		})
+	}
 
 	stateTomb.Go(func() error {
 		aliveWorkerCount := len(conf.CloudflareConfig.Accounts)
