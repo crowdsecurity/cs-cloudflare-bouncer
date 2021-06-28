@@ -587,13 +587,15 @@ func (worker *CloudflareWorker) insertDecision(decision *models.Decision, decisi
 		worker.Logger.Debugf("ignored new decision with scope=%s, type=%s, value=%s", *decision.Scope, *decision.Type, *decision.Value)
 		return
 	}
+	decisionStatus := "new"
+	if decisionIsExpired {
+		decisionStatus = "expired"
+	}
+	worker.Logger.Infof("found %s decision with value=%s, scope=%s, type=%s", decisionStatus, *decision.Value, *decision.Scope, *decision.Type)
 	*container = append(*container, decision)
 }
 
 func (worker *CloudflareWorker) CollectLAPIStream(streamDecision *models.DecisionsStreamResponse) {
-	worker.Logger.Infof("received %d decisions, %d are new , %d are expired",
-		len(streamDecision.New)+len(streamDecision.Deleted), len(streamDecision.New), len(streamDecision.Deleted),
-	)
 	for _, decision := range streamDecision.New {
 		worker.insertDecision(decision, false)
 	}
@@ -689,7 +691,7 @@ func (worker *CloudflareWorker) UpdateRules() error {
 	for action, state := range worker.CFStateByAction {
 		if !worker.CFStateByAction[action].UpdateExpr() {
 			// expression is still same, why bother.
-			worker.Logger.Infof("rule for %s action is unchanged", action)
+			worker.Logger.Debugf("rule for %s action is unchanged", action)
 			continue
 		}
 		stateIsNew = true
@@ -758,7 +760,7 @@ func (worker *CloudflareWorker) Run() error {
 			}
 
 		case decisions := <-worker.LAPIStream:
-			worker.Logger.Info("collecting decisions from LAPI")
+			worker.Logger.Debug("collecting decisions from LAPI")
 			worker.CollectLAPIStream(decisions)
 
 		}

@@ -98,7 +98,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			zoneIdSet[zone.ID] = true
 
 		}
-
 	}
 	/*Configure logging*/
 	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel); err != nil {

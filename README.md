@@ -30,7 +30,7 @@ systemctl status cs-cloudflare-bouncer
 
 ## From source
 
-:warning: requires go >= 1.13
+:warning: requires go >= 1.16
 
 ```bash
 make release

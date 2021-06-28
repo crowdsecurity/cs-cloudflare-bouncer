@@ -133,6 +133,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if *delete || *onlySetup {
+		log.SetOutput(os.Stdout)
+	}
+
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 
