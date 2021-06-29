@@ -16,6 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var mockAPICallCounter uint32 = 0
+
 type mockCloudflareAPI struct {
 	IPLists           []cloudflare.IPList
 	FirewallRulesList []cloudflare.FirewallRule
@@ -177,11 +179,12 @@ func TestIPFirewallSetUp(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	worker := CloudflareWorker{
-		API:          mockCfAPI,
-		Account:      dummyCFAccount,
-		Wg:           &wg,
-		UpdatedState: make(chan map[string]*CloudflareState, 2),
-		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
+		API:            mockCfAPI,
+		Account:        dummyCFAccount,
+		Wg:             &wg,
+		UpdatedState:   make(chan map[string]*CloudflareState, 2),
+		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
+		tokenCallCount: &mockAPICallCounter,
 	}
 	worker.Init()
 	worker.SetUpCloudflareIfNewState()
@@ -223,11 +226,12 @@ func TestCollectLAPIStream(t *testing.T) {
 		Deleted: []*models.Decision{deletedDecisions},
 	}
 	worker := CloudflareWorker{
-		Account:      dummyCFAccount,
-		API:          mockCfAPI,
-		Wg:           &wg,
-		UpdatedState: make(chan map[string]*CloudflareState, 1),
-		Count:        prometheus.NewCounter(prometheus.CounterOpts{}),
+		Account:        dummyCFAccount,
+		API:            mockCfAPI,
+		Wg:             &wg,
+		UpdatedState:   make(chan map[string]*CloudflareState, 1),
+		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
+		tokenCallCount: &mockAPICallCounter,
 	}
 	worker.Init()
 	worker.setUpIPList()
@@ -516,6 +520,7 @@ func TestCloudflareWorker_SendASBans(t *testing.T) {
 				CFStateByAction: tt.fields.CFStateByAction,
 				NewASDecisions:  tt.fields.NewASDecisions,
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
+				tokenCallCount:  &mockAPICallCounter,
 			}
 			worker.CFStateByAction = make(map[string]*CloudflareState)
 			worker.Account = dummyCFAccount
@@ -597,6 +602,7 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 				CFStateByAction:    tt.fields.CFStateByAction,
 				ExpiredASDecisions: tt.fields.ExpiredASDecisions,
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
+				tokenCallCount:     &mockAPICallCounter,
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteASBans()
@@ -666,6 +672,7 @@ func TestCloudflareWorker_SendCountryBans(t *testing.T) {
 				CFStateByAction:     tt.fields.CFStateByAction,
 				NewCountryDecisions: tt.fields.NewCountryDecisions,
 				Logger:              log.WithFields(log.Fields{"account_id": "test worker"}),
+				tokenCallCount:      &mockAPICallCounter,
 			}
 			worker.CFStateByAction = make(map[string]*CloudflareState)
 			worker.Account = dummyCFAccount
@@ -744,6 +751,7 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 				CFStateByAction:         tt.fields.CFStateByAction,
 				ExpiredCountryDecisions: tt.fields.ExpiredCountryDecisions,
 				Logger:                  log.WithFields(log.Fields{"account_id": "test worker"}),
+				tokenCallCount:          &mockAPICallCounter,
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteCountryBans()
@@ -893,6 +901,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				API:             mockCfAPI,
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
+				tokenCallCount:  &mockAPICallCounter,
 			}
 			err := worker.AddNewIPs()
 			if err != nil {
@@ -987,6 +996,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				API:                mockCfAPI,
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:              promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test2%d", i), Help: "no help you're just a test"}),
+				tokenCallCount:     &mockAPICallCounter,
 			}
 			err := worker.DeleteIPs()
 			if err != nil {
