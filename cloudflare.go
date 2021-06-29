@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -14,6 +15,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+const CallsPerSecondLimit uint32 = 4
 
 var CloudflareActionByDecisionType = map[string]string{
 	"captcha":      "challenge",
@@ -116,6 +119,7 @@ type CloudflareWorker struct {
 	API                     cloudflareAPI
 	Wg                      *sync.WaitGroup
 	Count                   prometheus.Counter
+	tokenCallCount          *uint32
 }
 
 type cloudflareAPI interface {
@@ -200,6 +204,10 @@ func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, er
 }
 
 func (worker *CloudflareWorker) getAPI() cloudflareAPI {
+	atomic.AddUint32(worker.tokenCallCount, 1)
+	if *worker.tokenCallCount > CallsPerSecondLimit {
+		time.Sleep(time.Second)
+	}
 	worker.Count.Inc()
 	return worker.API
 }
@@ -508,10 +516,7 @@ func (worker *CloudflareWorker) Init() error {
 	if worker.API == nil { // this for easy swapping during tests
 		worker.API, err = cloudflare.NewWithAPIToken(worker.Account.Token, cloudflare.UsingAccount(worker.Account.ID))
 	}
-	if err != nil {
-		worker.Logger.Error(err.Error())
-		return err
-	}
+
 	worker.Logger.Debug("setup of API complete")
 
 	if len(worker.CFStateByAction) != 0 {
@@ -762,7 +767,6 @@ func (worker *CloudflareWorker) Run() error {
 		case decisions := <-worker.LAPIStream:
 			worker.Logger.Debug("collecting decisions from LAPI")
 			worker.CollectLAPIStream(decisions)
-
 		}
 	}
 
