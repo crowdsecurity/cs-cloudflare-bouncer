@@ -467,7 +467,7 @@ func Test_normalizeIP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeIP(tt.args.ip); got != tt.want {
+			if got := normalizeDecisionValue(tt.args.ip); got != tt.want {
 				t.Errorf("normalizeIP() = %v, want %v", got, tt.want)
 			}
 		})
@@ -744,18 +744,18 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 			},
 			want: []string{"9999"},
 		},
-		// {
-		// 	name: "ipv6 dups",
-		// 	fields: fields{
-		// 		CFStateByAction: map[string]*CloudflareState{
-		// 			action: {
-		// 				CountrySet: map[string]struct{}{"UK": {}, "9999": {}},
-		// 			},
-		// 		},
-		// 		ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}},
-		// 	},
-		// 	want: []string{"9999"},
-		// },
+		{
+			name: "ipv6 dups",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: {
+						CountrySet: map[string]struct{}{"UK": {}, "9999": {}},
+					},
+				},
+				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}},
+			},
+			want: []string{"9999"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
