@@ -146,13 +146,39 @@ func normalizeIP(ip string) string {
 		return ip
 	}
 
+	const IPV6TotalBlocks int = 8
+	fullIPblocks := make([]string, IPV6TotalBlocks)
+	right := ""
+	left := ""
+
 	comps := strings.Split(ip, "::")
-	// comps[0] would be the IP part and comps[1] (if present) would be the either remaining IP or CIDR
-	// we don't care about remaining IP because last digits can be changed.
-	ipBlocks := strings.Split(comps[0], ":")
-	blockCount := min(4, len(ipBlocks))
+	left = comps[0]
+	if len(comps) == 2 {
+		right = comps[1]
+		right = strings.Split(right, "/")[0]
+	}
+
+	leftIpblocks := strings.Split(left, ":")
+	rightIpblocks := strings.Split(right, ":")
+
+	leftIndex := 0
+	rightIndex := 0
+
+	for i := 0; i < IPV6TotalBlocks; i++ {
+		remainingBlocks := IPV6TotalBlocks - i
+		if leftIndex < len(leftIpblocks) {
+			fullIPblocks[i] = leftIpblocks[leftIndex]
+			leftIndex++
+		} else if remainingBlocks-len(rightIpblocks) > 0 {
+			fullIPblocks[i] = "0000"
+		} else {
+			fullIPblocks[i] = rightIpblocks[rightIndex]
+			rightIndex++
+		}
+	}
+	blockCount := min(4, len(fullIPblocks))
 	cidr := blockCount * 16
-	return strings.Join(ipBlocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
+	return strings.Join(fullIPblocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
 }
 
 // Helper which removes dups and splits decisions according to their action.
