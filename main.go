@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -162,6 +164,7 @@ func main() {
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 	stateStream := make(chan map[string]*CloudflareState)
 	workerStates := make([]CloudflareState, 0)
+	APICountByToken := make(map[string]*uint32)
 
 	err = loadCachedStates(&workerStates)
 	if err != nil {
@@ -179,6 +182,10 @@ func main() {
 				states[s.Action] = &tmp
 			}
 		}
+		var tokenCallCount uint32 = 0
+		if _, ok := APICountByToken[account.Token]; !ok {
+			APICountByToken[account.Token] = &tokenCallCount
+		}
 
 		wg.Add(1)
 		worker := CloudflareWorker{
@@ -191,6 +198,7 @@ func main() {
 			UpdatedState:    stateStream,
 			CFStateByAction: states,
 			Count:           Count,
+			tokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
 			workerTomb.Go(func() error {
@@ -287,6 +295,16 @@ func main() {
 		}
 		go HandleSignals()
 	}
+
+	apiCallCounterWindow := time.NewTicker(time.Second)
+	go func() {
+		for {
+			<-apiCallCounterWindow.C
+			for token := range APICountByToken {
+				atomic.SwapUint32(APICountByToken[token], 0)
+			}
+		}
+	}()
 
 	for {
 		select {
