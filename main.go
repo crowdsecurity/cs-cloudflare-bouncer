@@ -309,7 +309,6 @@ func main() {
 	for {
 		select {
 		case <-workerTomb.Dying():
-			fmt.Println("HEREE !!!! ")
 			dispatchTomb.Kill(nil)
 			err := workerTomb.Err()
 			if err != nil {
