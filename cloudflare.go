@@ -149,7 +149,9 @@ func normalizeDecisionValue(value string) string {
 	var address *net.IPNet
 	_, address, err := net.ParseCIDR(value)
 	if err != nil {
+		// doesn't have mask, we add one then.
 		_, address, _ = net.ParseCIDR(value + "/64")
+		// this would never cause error because crowdsec already validates IP
 	}
 
 	if ones, _ := address.Mask.Size(); ones < 64 {
