@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -145,40 +146,17 @@ func normalizeDecisionValue(value string) string {
 		// it is a ipv4
 		return value
 	}
-
-	const IPV6TotalBlocks int = 8
-	fullIPblocks := make([]string, IPV6TotalBlocks)
-	right := ""
-	left := ""
-
-	comps := strings.Split(value, "::")
-	left = comps[0]
-	if len(comps) == 2 {
-		right = comps[1]
-		right = strings.Split(right, "/")[0]
+	var address *net.IPNet
+	_, address, err := net.ParseCIDR(value)
+	if err != nil {
+		_, address, _ = net.ParseCIDR(value + "/64")
 	}
 
-	leftIpblocks := strings.Split(left, ":")
-	rightIpblocks := strings.Split(right, ":")
-
-	leftIndex := 0
-	rightIndex := 0
-
-	for i := 0; i < IPV6TotalBlocks; i++ {
-		remainingBlocks := IPV6TotalBlocks - i
-		if leftIndex < len(leftIpblocks) {
-			fullIPblocks[i] = leftIpblocks[leftIndex]
-			leftIndex++
-		} else if remainingBlocks-len(rightIpblocks) > 0 {
-			fullIPblocks[i] = "0000"
-		} else {
-			fullIPblocks[i] = rightIpblocks[rightIndex]
-			rightIndex++
-		}
+	if ones, _ := address.Mask.Size(); ones < 64 {
+		return address.String()
 	}
-	blockCount := min(4, len(fullIPblocks))
-	cidr := blockCount * 16
-	return strings.Join(fullIPblocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
+	address.Mask = net.CIDRMask(64, 128)
+	return address.String()
 }
 
 // Helper which removes dups and splits decisions according to their action.

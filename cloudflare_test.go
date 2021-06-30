@@ -441,28 +441,28 @@ func Test_normalizeIP(t *testing.T) {
 			args: args{
 				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
 			},
-			want: "2001:0db8:85a3:0000::/64",
+			want: "2001:db8:85a3::/64",
 		},
 		{
 			name: "full ipv6 in shortform must be converted to subnet form",
 			args: args{
 				ip: "2001::",
 			},
-			want: "2001:0000:0000:0000::/64",
+			want: "2001::/64",
 		},
 		{
 			name: "full ipv6 with cidr should be made to atlease /64 form",
 			args: args{
 				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334/65",
 			},
-			want: "2001:0db8:85a3:0000::/64",
+			want: "2001:db8:85a3::/64",
 		},
 		{
 			name: "ipv6 shortform, but has valid tail",
 			args: args{
 				ip: "2600:3c02::f03c:92ff:fe65:f0ff", // 2600:3c02:0000:0000:f03c:92ff:fe65:f0ff
 			},
-			want: "2600:3c02:0000:0000::/64",
+			want: "2600:3c02::/64",
 		},
 	}
 	for _, tt := range tests {
