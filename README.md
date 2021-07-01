@@ -24,7 +24,9 @@ Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bou
 tar xzvf cs-cloudflare-bouncer.tgz
 cd cs-cloudflare-bouncer/
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status cs-cloudflare-bouncer
+sudo cs-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1>, <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
+sudo cat cfg.yaml > /etc/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml # Verify the generated config and paste it in bouncer's config.
+systemctl start cs-cloudflare-bouncer
 ```
 
 
@@ -36,8 +38,10 @@ systemctl status cs-cloudflare-bouncer
 make release
 cd cs-cloudflare-bouncer-vX.X.X
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status cs-cloudflare-bouncer
 ```
+Rest of the steps are same as of the above method.
+
+**Always run `/usr/bin/cs-cloudflare-bouncer -d` to cleanup cloudflare components before editing the config files.**
 
 # Configuration
 
