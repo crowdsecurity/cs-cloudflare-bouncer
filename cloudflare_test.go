@@ -445,26 +445,33 @@ func Test_normalizeIP(t *testing.T) {
 			args: args{
 				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
 			},
-			want: "2001:0db8:85a3:0000::/64",
+			want: "2001:db8:85a3::/64",
 		},
 		{
 			name: "full ipv6 in shortform must be converted to subnet form",
 			args: args{
 				ip: "2001::",
 			},
-			want: "2001::/16",
+			want: "2001::/64",
 		},
 		{
 			name: "full ipv6 with cidr should be made to atlease /64 form",
 			args: args{
 				ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334/65",
 			},
-			want: "2001:0db8:85a3:0000::/64",
+			want: "2001:db8:85a3::/64",
+		},
+		{
+			name: "ipv6 shortform, but has valid tail",
+			args: args{
+				ip: "2600:3c02::f03c:92ff:fe65:f0ff", // 2600:3c02:0000:0000:f03c:92ff:fe65:f0ff
+			},
+			want: "2600:3c02::/64",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeIP(tt.args.ip); got != tt.want {
+			if got := normalizeDecisionValue(tt.args.ip); got != tt.want {
 				t.Errorf("normalizeIP() = %v, want %v", got, tt.want)
 			}
 		})
@@ -734,6 +741,18 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 		},
 		{
 			name: "delete something multiple times",
+			fields: fields{
+				CFStateByAction: map[string]*CloudflareState{
+					action: {
+						CountrySet: map[string]struct{}{"UK": {}, "9999": {}},
+					},
+				},
+				ExpiredCountryDecisions: []*models.Decision{{Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}, {Value: &Country1, Type: &action}},
+			},
+			want: []string{"9999"},
+		},
+		{
+			name: "ipv6 dups",
 			fields: fields{
 				CFStateByAction: map[string]*CloudflareState{
 					action: {

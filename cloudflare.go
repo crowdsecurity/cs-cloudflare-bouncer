@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -144,19 +145,24 @@ func min(a int, b int) int {
 	return a
 }
 
-func normalizeIP(ip string) string {
-	if strings.Count(ip, ":") <= 1 {
+func normalizeDecisionValue(value string) string {
+	if strings.Count(value, ":") <= 1 {
 		// it is a ipv4
-		return ip
+		return value
+	}
+	var address *net.IPNet
+	_, address, err := net.ParseCIDR(value)
+	if err != nil {
+		// doesn't have mask, we add one then.
+		_, address, _ = net.ParseCIDR(value + "/64")
+		// this would never cause error because crowdsec already validates IP
 	}
 
-	comps := strings.Split(ip, "::")
-	// comps[0] would be the IP part and comps[1] (if present) would be the either remaining IP or CIDR
-	// we don't care about remaining IP because last digits can be changed.
-	ipBlocks := strings.Split(comps[0], ":")
-	blockCount := min(4, len(ipBlocks))
-	cidr := blockCount * 16
-	return strings.Join(ipBlocks[:blockCount], ":") + fmt.Sprintf("::/%d", cidr)
+	if ones, _ := address.Mask.Size(); ones < 64 {
+		return address.String()
+	}
+	address.Mask = net.CIDRMask(64, 128)
+	return address.String()
 }
 
 // Helper which removes dups and splits decisions according to their action.
@@ -166,6 +172,7 @@ func dedupAndClassifyDecisionsByAction(decisions []*models.Decision) map[string]
 	decisonsByAction := make(map[string][]*models.Decision)
 	tmpDefaulted := make([]*models.Decision, 0)
 	for _, decision := range decisions {
+		*decision.Value = normalizeDecisionValue(*decision.Value)
 		action := CloudflareActionByDecisionType[*decision.Type]
 		if _, ok := decisionValueSet[*decision.Value]; ok {
 			// dup
@@ -393,7 +400,7 @@ func (worker *CloudflareWorker) AddNewIPs() error {
 		newIPs := make([]cloudflare.IPListItemCreateRequest, 0)
 		for _, decision := range decisions {
 			// check if ip already exists in state. Send if not exists.
-			ip := normalizeIP(*decision.Value)
+			ip := normalizeDecisionValue(*decision.Value)
 			if _, ok := state.IPListState.ItemByIP[ip]; !ok {
 				newIPs = append(newIPs, cloudflare.IPListItemCreateRequest{
 					IP:      ip,
@@ -437,7 +444,7 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 		deleteIPs := cloudflare.IPListItemDeleteRequest{Items: make([]cloudflare.IPListItemDeleteItemRequest, 0)}
 		for _, decision := range decisions {
 			// delete only if ip already exists in state.
-			ip := normalizeIP(*decision.Value)
+			ip := normalizeDecisionValue(*decision.Value)
 			if item, ok := state.IPListState.ItemByIP[ip]; ok {
 				deleteIPs.Items = append(deleteIPs.Items, cloudflare.IPListItemDeleteItemRequest{ID: item.ID})
 			}
