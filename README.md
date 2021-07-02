@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/crowdsecurity/cs-cloudflare-bouncer/raw/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
+<img src="https://github.com/crowdsecurity/crowdsec-cloudflare-bouncer/raw/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
 </p>
 <p align="center">
 <img src="https://img.shields.io/badge/build-pass-green">
@@ -21,10 +21,10 @@ A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall. 
 Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bouncer/releases).
 
 ```bash
-tar xzvf cs-cloudflare-bouncer.tgz
-cd cs-cloudflare-bouncer/
+tar xzvf crowdsec-cloudflare-bouncer.tgz
+cd crowdsec-cloudflare-bouncer/
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status cs-cloudflare-bouncer
+systemctl status crowdsec-cloudflare-bouncer
 ```
 
 
@@ -34,14 +34,14 @@ systemctl status cs-cloudflare-bouncer
 
 ```bash
 make release
-cd cs-cloudflare-bouncer-vX.X.X
+cd crowdsec-cloudflare-bouncer-vX.X.X
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status cs-cloudflare-bouncer
+systemctl status crowdsec-cloudflare-bouncer
 ```
 
 # Configuration
 
-Configuration file can be found at `/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml`
+Configuration file can be found at `/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml`
 
 ```yaml
 # CrowdSec Config
@@ -95,15 +95,15 @@ Generates bouncer config by discovering all the accounts and the zones associate
 Example Usage:
 
 ```
-/usr/local/bin/cs-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... > cfg.yaml
-cat cfg.yaml  > /etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml
+/usr/local/bin/crowdsec-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... > cfg.yaml
+cat cfg.yaml  > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
 ```
 
-**Note:** This script only generates cloudflare related config. By default it refers to the config at `/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml` for crowdsec configuration. 
+**Note:** This script only generates cloudflare related config. By default it refers to the config at `/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml` for crowdsec configuration. 
 
 Using custom config:
 ```
-/usr/local/bin/cs-cloudflare-bouncer -c ./cfg.yaml -g <TOKEN_1>,<TOKEN_2>... 
+/usr/local/bin/crowdsec-cloudflare-bouncer -c ./cfg.yaml -g <TOKEN_1>,<TOKEN_2>... 
 ```
 
 ### Cloudflare Setup: 
@@ -112,7 +112,7 @@ This only creates the required IP lists and firewall rules at cloudflare and exi
 
 Example Usage:
 ```
-/usr/local/bin/cs-cloudflare-bouncer -s 
+/usr/local/bin/crowdsec-cloudflare-bouncer -s 
 ```
 
 ### Cloudflare Cleanup: 
@@ -121,7 +121,7 @@ This deletes all IP lists and firewall rules at cloudflare which were created by
 
 Example Usage:
 ```
-/usr/local/bin/cs-cloudflare-bouncer -d 
+/usr/local/bin/crowdsec-cloudflare-bouncer -d 
 ```
 
 # How it works
@@ -131,7 +131,7 @@ to update IP lists and firewall rules depending upon the decision.
 
 
 # Troubleshooting
- - Logs are in `/var/log/cs-cloudflare-bouncer.log`
- - The cache is at `/etc/crowdsec/cs-cloudflare-bouncer/cache.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
+ - Logs are in `/var/log/crowdsec-cloudflare-bouncer.log`
+ - The cache is at `/etc/crowdsec/bouncers/cloudflare.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
  - You can view/interact directly in the ban list either with `cscli`
- - Service can be started/stopped with `systemctl start/stop cs-cloudflare-bouncer`
+ - Service can be started/stopped with `systemctl start/stop crowdsec-cloudflare-bouncer`

@@ -11,8 +11,8 @@
 .vscode
 
 # ignore make things 
-cs-cloudflare-bouncer.tgz
-cs-cloudflare-bouncer*/
+crowdsec-cloudflare-bouncer.tgz
+crowdsec-cloudflare-bouncer*/
 
 # ignore cache
 cache.json
