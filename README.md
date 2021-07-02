@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/crowdsecurity/crowdsec-cloudflare-bouncer/raw/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
+<img src="https://github.com/crowdsecurity/cs-cloudflare-bouncer/raw/main/docs/assets/crowdsec_cloudfare.png" alt="CrowdSec" title="CrowdSec" width="280" height="300" />
 </p>
 <p align="center">
 <img src="https://img.shields.io/badge/build-pass-green">
@@ -18,7 +18,7 @@ A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall. 
 
 ## Install script
 
-Download the [latest release](https://github.com/crowdsecurity/crowdsec-cloudflare-bouncer/releases).
+Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bouncer/releases).
 
 ```bash
 tar xzvf crowdsec-cloudflare-bouncer.tgz
@@ -83,7 +83,7 @@ log_level: info # valid choices are either debug, info, error
 For obtaining the `token`:
 1. Sign in as a user who has access to the desired account.
 2. Go to [Tokens](https://dash.cloudflare.com/profile/api-tokens) and create the token. The bouncer requires the follwing permissions to function.
-![image](https://raw.githubusercontent.com/crowdsecurity/crowdsec-cloudflare-bouncer/main/docs/assets/token_permissions.png)
+![image](https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/token_permissions.png)
 
 To automatically generate config for cloudflare check the  helper section below.
 
