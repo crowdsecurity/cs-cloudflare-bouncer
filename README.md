@@ -18,13 +18,16 @@ A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall. 
 
 ## Install script
 
-Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bouncer/releases).
+Download the [latest release](https://github.com/crowdsecurity/crowdsec-cloudflare-bouncer/releases).
 
 ```bash
 tar xzvf crowdsec-cloudflare-bouncer.tgz
 cd crowdsec-cloudflare-bouncer/
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status crowdsec-cloudflare-bouncer
+sudo crowdsec-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
+sudo cat cfg.yaml > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml # Verify the generated config and paste it in bouncer's config.
+sudo crowdsec-cloudflare-bouncer -s # this sets up IP lists and firewall rules at cloudflare for the provided config. 
+systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec decisions wit cloudflare components.
 ```
 
 
@@ -36,8 +39,10 @@ systemctl status crowdsec-cloudflare-bouncer
 make release
 cd crowdsec-cloudflare-bouncer-vX.X.X
 sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
-systemctl status crowdsec-cloudflare-bouncer
 ```
+Rest of the steps are same as of the above method.
+
+**Always run `/usr/bin/crowdsec-cloudflare-bouncer -d` to cleanup cloudflare components before editing the config files.**
 
 # Configuration
 
@@ -78,7 +83,7 @@ log_level: info # valid choices are either debug, info, error
 For obtaining the `token`:
 1. Sign in as a user who has access to the desired account.
 2. Go to [Tokens](https://dash.cloudflare.com/profile/api-tokens) and create the token. The bouncer requires the follwing permissions to function.
-![image](https://raw.githubusercontent.com/crowdsecurity/cs-cloudflare-bouncer/main/docs/assets/token_permissions.png)
+![image](https://raw.githubusercontent.com/crowdsecurity/crowdsec-cloudflare-bouncer/main/docs/assets/token_permissions.png)
 
 To automatically generate config for cloudflare check the  helper section below.
 
