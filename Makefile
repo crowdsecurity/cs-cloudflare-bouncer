@@ -18,9 +18,9 @@ export LD_OPTS=-ldflags "-s -w -X github.com/crowdsecurity/cs-cloudflare-bouncer
 -X github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version.GoVersion=$(BUILD_GOVERSION)"
 PREFIX?="/"
 PID_DIR = $(PREFIX)"/var/run/"
-BINARY_NAME=cs-cloudflare-bouncer
+BINARY_NAME=crowdsec-cloudflare-bouncer
 
-RELDIR = "cs-cloudflare-bouncer-${BUILD_VERSION}"
+RELDIR = "crowdsec-cloudflare-bouncer-${BUILD_VERSION}"
 
 all: clean build
 
@@ -40,7 +40,7 @@ build: goversion clean
 clean:
 	@rm -f $(BINARY_NAME)
 	@rm -rf ${RELDIR}
-	@rm -f cs-cloudflare-bouncer.tgz || ""
+	@rm -f crowdsec-cloudflare-bouncer.tgz || ""
 
 
 .PHONY: release
@@ -57,5 +57,5 @@ release: build
 	@chmod +x $(RELDIR)/install.sh
 	@chmod +x $(RELDIR)/uninstall.sh
 	@chmod +x $(RELDIR)/upgrade.sh
-	@tar cvzf cs-cloudflare-bouncer.tgz $(RELDIR)
+	@tar cvzf crowdsec-cloudflare-bouncer.tgz $(RELDIR)
 	

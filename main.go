@@ -24,9 +24,9 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
-const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/cs-cloudflare-bouncer/cs-cloudflare-bouncer.yaml"
+const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
 
-var cachePath string = "/etc/crowdsec/cs-cloudflare-bouncer/cache.json"
+var cachePath string = "/etc/crowdsec/bouncers/cloudflare-cache.json"
 
 func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
