@@ -26,7 +26,7 @@ import (
 
 const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
 
-var cachePath string = "/etc/crowdsec/bouncers/cloudflare.json"
+var cachePath string = "/etc/crowdsec/bouncers/cloudflare-cache.json"
 
 func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
