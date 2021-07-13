@@ -59,3 +59,17 @@ release: build
 	@chmod +x $(RELDIR)/upgrade.sh
 	@tar cvzf crowdsec-cloudflare-bouncer.tgz $(RELDIR)
 	
+release_static: static
+	@if [ -z ${BUILD_VERSION} ] ; then BUILD_VERSION="local" ; fi
+	@if [ -d $(RELDIR) ]; then echo "$(RELDIR) already exists, clean" ;  exit 1 ; fi
+	@echo Building Release to dir $(RELDIR)
+	@mkdir $(RELDIR)/
+	@cp $(BINARY_NAME) $(RELDIR)/
+	@cp -R ./config $(RELDIR)/
+	@cp ./scripts/install.sh $(RELDIR)/
+	@cp ./scripts/uninstall.sh $(RELDIR)/
+	@cp ./scripts/upgrade.sh $(RELDIR)/
+	@chmod +x $(RELDIR)/install.sh
+	@chmod +x $(RELDIR)/uninstall.sh
+	@chmod +x $(RELDIR)/upgrade.sh
+	@tar cvzf crowdsec-cloudflare-bouncer-static.tgz $(RELDIR)
