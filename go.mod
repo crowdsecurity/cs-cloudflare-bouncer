@@ -1,4 +1,4 @@
-module crowdsec/crowdsec-cloudflare-bouncer
+module github.com/crowdsecurity/cs-cloudflare-bouncer
 
 go 1.16
 
