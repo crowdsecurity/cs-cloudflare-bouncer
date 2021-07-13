@@ -3,7 +3,7 @@ name: build-binary-package
 
 on: 
   release:
-    types: prereleased
+    types: [prereleased, released]
 
 jobs:
   build-binary-package:
