@@ -6,6 +6,8 @@ GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 
+GOOS ?= linux
+GOARCH ?= amd64
 
 #Current versioning information from env
 BUILD_VERSION?="$(shell git describe --tags `git rev-list --tags --max-count=1`)"
@@ -40,7 +42,7 @@ build: goversion clean
 clean:
 	@rm -f $(BINARY_NAME)
 	@rm -rf ${RELDIR}
-	@rm -f crowdsec-cloudflare-bouncer.tgz || ""
+	@rm -f crowdsec-cloudflare-bouncer-*.tgz || ""
 
 
 .PHONY: release
@@ -57,8 +59,8 @@ release: build
 	@chmod +x $(RELDIR)/install.sh
 	@chmod +x $(RELDIR)/uninstall.sh
 	@chmod +x $(RELDIR)/upgrade.sh
-	@tar cvzf crowdsec-cloudflare-bouncer.tgz $(RELDIR)
-	
+	@tar cvzf crowdsec-cloudflare-bouncer-$(GOOS)-$(GOARCH).tgz $(RELDIR)
+
 release_static: static
 	@if [ -z ${BUILD_VERSION} ] ; then BUILD_VERSION="local" ; fi
 	@if [ -d $(RELDIR) ]; then echo "$(RELDIR) already exists, clean" ;  exit 1 ; fi
@@ -72,4 +74,4 @@ release_static: static
 	@chmod +x $(RELDIR)/install.sh
 	@chmod +x $(RELDIR)/uninstall.sh
 	@chmod +x $(RELDIR)/upgrade.sh
-	@tar cvzf crowdsec-cloudflare-bouncer-static.tgz $(RELDIR)
+	@tar cvzf crowdsec-cloudflare-bouncer-$(GOOS)-$(GOARCH)-static.tgz $(RELDIR)
