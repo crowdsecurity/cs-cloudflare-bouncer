@@ -26,6 +26,9 @@ import (
 )
 
 const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
+const (
+	name = "crowdsec-cloudflare-bouncer"
+)
 
 var cachePath string = "/etc/crowdsec/bouncers/cloudflare-cache.json"
 
@@ -251,6 +254,7 @@ func main() {
 			APIKey:         conf.CrowdSecLAPIKey,
 			APIUrl:         conf.CrowdSecLAPIUrl,
 			TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
+			UserAgent:      fmt.Sprintf("%s/%s", name, version.VersionStr()),
 		}
 		if err := csLAPI.Init(); err != nil {
 			log.Fatalf(err.Error())
