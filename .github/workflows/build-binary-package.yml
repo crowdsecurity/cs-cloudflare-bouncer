@@ -32,6 +32,8 @@ jobs:
         args: crowdsec-cloudflare-bouncer-${{ env.GOOS }}-${{ env.GOARCH }}.tgz application/x-gzip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
   build-static-binary-package:
     name: Build and upload static binary package
     runs-on: ubuntu-latest
@@ -58,3 +60,5 @@ jobs:
         args: crowdsec-cloudflare-bouncer-${{ env.GOOS }}-${{ env.GOARCH }}-static.tgz application/x-gzip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
