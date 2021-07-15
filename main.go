@@ -16,6 +16,7 @@ import (
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/version"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -111,11 +112,16 @@ func main() {
 	configPath := flag.String("c", "", "path to config file")
 	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
 	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
-
+	ver := flag.Bool("v", false, "Display version information and exit")
 	flag.Parse()
 
+	if *ver {
+		version.Show()
+		return
+	}
+
 	if *delete && *onlySetup {
-		log.Fatal("conflicting cli arguements, pass only one of '-d' or '-s' ")
+		log.Fatal("conflicting cli arguments, pass only one of '-d' or '-s' ")
 	}
 
 	if configPath == nil || *configPath == "" {
