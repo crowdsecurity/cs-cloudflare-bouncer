@@ -99,7 +99,7 @@ Generates bouncer config by discovering all the accounts and the zones associate
 
 Example Usage:
 
-```
+```bash
 /usr/local/bin/crowdsec-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... > cfg.yaml
 cat cfg.yaml  > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
 ```
@@ -107,7 +107,7 @@ cat cfg.yaml  > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
 **Note:** This script only generates cloudflare related config. By default it refers to the config at `/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml` for crowdsec configuration. 
 
 Using custom config:
-```
+```bash
 /usr/local/bin/crowdsec-cloudflare-bouncer -c ./cfg.yaml -g <TOKEN_1>,<TOKEN_2>... 
 ```
 
@@ -116,7 +116,7 @@ Using custom config:
 This only creates the required IP lists and firewall rules at cloudflare and exits.
 
 Example Usage:
-```
+```bash
 /usr/local/bin/crowdsec-cloudflare-bouncer -s 
 ```
 
@@ -125,7 +125,7 @@ Example Usage:
 This deletes all IP lists and firewall rules at cloudflare which were created by the bouncer. It also deletes the local cache. 
 
 Example Usage:
-```
+```bash
 /usr/local/bin/crowdsec-cloudflare-bouncer -d 
 ```
 
