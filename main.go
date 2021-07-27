@@ -255,7 +255,6 @@ func main() {
 			APIUrl:         conf.CrowdSecLAPIUrl,
 			TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
 			UserAgent:      fmt.Sprintf("%s/%s", name, version.VersionStr()),
-			Scopes:         []string{"ip", "range", "as", "country"},
 		}
 		if err := csLAPI.Init(); err != nil {
 			log.Fatalf(err.Error())
