@@ -23,11 +23,11 @@ Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bou
 ```bash
 tar xzvf crowdsec-cloudflare-bouncer.tgz
 cd crowdsec-cloudflare-bouncer/
-sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
+sudo ./install.sh
 sudo crowdsec-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
 sudo cat cfg.yaml > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml # Verify the generated config and paste it in bouncer's config.
 sudo crowdsec-cloudflare-bouncer -s # this sets up IP lists and firewall rules at cloudflare for the provided config. 
-systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec decisions wit cloudflare components.
+sudo systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec decisions with cloudflare components.
 ```
 
 
@@ -38,7 +38,7 @@ systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec
 ```bash
 make release
 cd crowdsec-cloudflare-bouncer-vX.X.X
-sudo ./install.sh # Use sudo ./install.sh --unattended  for automated setup
+sudo ./install.sh # Use sudo ./install.sh
 ```
 Rest of the steps are same as of the above method.
 
