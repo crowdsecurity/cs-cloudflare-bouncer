@@ -38,7 +38,7 @@ sudo systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the cro
 ```bash
 make release
 cd crowdsec-cloudflare-bouncer-vX.X.X
-sudo ./install.sh # Use sudo ./install.sh
+sudo ./install.sh
 ```
 Rest of the steps are same as of the above method.
 
