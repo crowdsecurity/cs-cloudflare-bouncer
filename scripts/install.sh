@@ -42,13 +42,6 @@ start_service(){
     echo "The crowdsec-cloudflare-bouncer service has been installed!"
 }
 
-show_help(){
-    echo "Usage:"
-    echo "    ./install.sh -h                               Display this help message."
-    echo "    ./install.sh --unattended                     Install in unattended mode, cloudflare credentials need to be provided manually in the config file"
-
-}
-
 install_bouncer(){
     echo "Installing crowdsec-cloudflare-bouncer"
     install_cloudflare_bouncer
