@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -125,6 +126,15 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 
+func (cfAPI *mockCloudflareAPI) CreateIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error) {
+	cfAPI.CreateIPListItems(ctx, id, items)
+	return cloudflare.IPListItemCreateResponse{
+		Result: struct {
+			OperationID string `json:"operation_id"`
+		}{OperationID: "test"},
+	}, nil
+}
+
 func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
 	for j := range cfAPI.IPLists {
 		if cfAPI.IPLists[j].ID == id {
@@ -148,6 +158,22 @@ func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string
 	}
 	cfAPI.IPListItems[id] = newItems
 	return cfAPI.IPListItems[id], nil
+}
+
+func (cfAPI *mockCloudflareAPI) DeleteIPListItemsAsync(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) (cloudflare.IPListItemDeleteResponse, error) {
+	cfAPI.DeleteIPListItems(ctx, id, items)
+	return cloudflare.IPListItemDeleteResponse{}, nil
+}
+
+func (cfAPI *mockCloudflareAPI) ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error) {
+	return cfAPI.IPListItems[id], nil
+}
+
+func (cfAPI *mockCloudflareAPI) GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error) {
+	return cloudflare.IPListBulkOperation{
+		ID:     id,
+		Status: "completed",
+	}, nil
 }
 
 var dummyCFAccount AccountConfig = AccountConfig{
@@ -926,6 +952,9 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+			//We need to wait to make sure the goroutine that updates the IP list is done
+			//The polling function will sleep *at least* 1s between calls
+			time.Sleep(3 * time.Second)
 			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
 			}

@@ -25,6 +25,7 @@ func TestNewConfig(t *testing.T) {
 				CrowdSecLAPIUrl:             "http://localhost:8080/",
 				CrowdSecLAPIKey:             "${LAPI_KEY}",
 				CrowdsecUpdateFrequencyYAML: "10s",
+				CachePath:                   "/etc/crowdsec/bouncers/cloudflare-cache.json",
 				CloudflareConfig: CloudflareConfig{
 					Accounts: []AccountConfig{
 						{
