@@ -947,14 +947,23 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
 				tokenCallCount:  &mockAPICallCounter,
+				UpdatedState:    make(chan map[string]*CloudflareState, 1),
 			}
 			err := worker.AddNewIPs()
 			if err != nil {
 				t.Error(err)
 			}
-			//We need to wait to make sure the goroutine that updates the IP list is done
-			//The polling function will sleep *at least* 1s between calls
-			time.Sleep(3 * time.Second)
+			if *tt.fields.NewIPDecisions[0].Type != randomAction {
+			OUTER:
+				for {
+					select {
+					case <-worker.UpdatedState:
+						break OUTER
+					default:
+						time.Sleep(1 * time.Second)
+					}
+				}
+			}
 			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
 			}
