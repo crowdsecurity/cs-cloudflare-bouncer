@@ -476,12 +476,12 @@ func (worker *CloudflareWorker) AddNewIPs() error {
 				for _, item := range items {
 					worker.CFStateByAction[action].IPListState.ItemByIP[item.IP] = item
 				}
+				worker.UpdatedState <- worker.CFStateByAction
 			}()
 
 		}
 
 	}
-	go func() { worker.UpdatedState <- worker.CFStateByAction }()
 	worker.NewIPDecisions = make([]*models.Decision, 0)
 	return nil
 }
