@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -104,6 +108,7 @@ func (cfState *CloudflareState) UpdateExpr() bool {
 
 type CloudflareWorker struct {
 	Logger                  *log.Entry
+	APILogger               *log.Logger
 	Account                 AccountConfig
 	ZoneLocks               []ZoneLock
 	CFStateByAction         map[string]*CloudflareState
@@ -136,13 +141,6 @@ type cloudflareAPI interface {
 	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error)
 	DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
-}
-
-func min(a int, b int) int {
-	if a > b {
-		return b
-	}
-	return a
 }
 
 func normalizeDecisionValue(value string) string {
@@ -510,8 +508,40 @@ func (worker *CloudflareWorker) SetUpCloudflareIfNewState() error {
 	return nil
 }
 
-func (worker *CloudflareWorker) Init() error {
+type InterceptLogger struct {
+	Tripper http.RoundTripper
+	logger  *log.Logger
+}
 
+func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		var buf bytes.Buffer
+		tmp := io.TeeReader(req.Body, &buf)
+		body, err := ioutil.ReadAll(tmp)
+		if err != nil {
+			return nil, err
+		}
+		lrt.logger.Infof("%s  %s", req.URL, string(body))
+		req.Body = io.NopCloser(&buf)
+	} else {
+		lrt.logger.Infof("%s ", req.URL)
+	}
+	res, e := lrt.Tripper.RoundTrip(req)
+	return res, e
+}
+
+func NewCloudflareClient(token string, accountID string, logger *log.Logger) (*cloudflare.API, error) {
+	httpClient := &http.Client{
+		Transport: InterceptLogger{
+			Tripper: http.DefaultTransport,
+			logger:  logger,
+		},
+	}
+	z, err := cloudflare.NewWithAPIToken(token, cloudflare.UsingAccount(accountID), cloudflare.HTTPClient(httpClient))
+	return z, err
+}
+
+func (worker *CloudflareWorker) Init() error {
 	defer func() { worker.UpdatedState <- worker.CFStateByAction }()
 
 	var err error
@@ -521,7 +551,11 @@ func (worker *CloudflareWorker) Init() error {
 	worker.ExpiredIPDecisions = make([]*models.Decision, 0)
 
 	if worker.API == nil { // this for easy swapping during tests
-		worker.API, err = cloudflare.NewWithAPIToken(worker.Account.Token, cloudflare.UsingAccount(worker.Account.ID))
+		worker.API, err = NewCloudflareClient(worker.Account.Token, worker.Account.ID, worker.APILogger)
+		if err != nil {
+			worker.Logger.Error(err.Error())
+			return err
+		}
 	}
 
 	worker.Logger.Debug("setup of API complete")

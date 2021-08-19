@@ -117,6 +117,8 @@ func main() {
 	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
 	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
 	ver := flag.Bool("v", false, "Display version information and exit")
+	logAPIRequests := flag.Bool("lc", false, "logs API requests")
+
 	flag.Parse()
 
 	if *ver {
@@ -148,6 +150,7 @@ func main() {
 		fmt.Print(cfg)
 		return
 	}
+
 	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
@@ -157,6 +160,14 @@ func main() {
 		log.SetOutput(os.Stdout)
 	}
 
+	var APILogger *log.Logger = log.New()
+	// if *logAPIRequests {
+	f, err := os.OpenFile("/var/log/crowdsec-cloudflare-bouncer-api_requests.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	APILogger.SetOutput(f)
+	// }
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 
@@ -208,6 +219,7 @@ func main() {
 		wg.Add(1)
 		worker := CloudflareWorker{
 			Account:         account,
+			APILogger:       APILogger,
 			Ctx:             ctx,
 			ZoneLocks:       zoneLocks,
 			LAPIStream:      lapiStream,
