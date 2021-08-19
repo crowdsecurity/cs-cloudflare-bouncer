@@ -302,7 +302,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingStringFromZoneIDs(str str
 		for _, filter := range filters {
 			if strings.Contains(filter.Expression, str) {
 				deleteFilters = append(deleteFilters, filter.ID)
-				zoneLogger.Debugf("deleting %s filter with expression %s", filter.ID, filter.Expression)
+				zoneLogger.Infof("deleting %s filter with expression %s", filter.ID, filter.Expression)
 			}
 		}
 
@@ -319,6 +319,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingStringFromZoneIDs(str str
 }
 
 func (worker *CloudflareWorker) deleteExistingIPList() error {
+	worker.Logger.Info("Getting all IP lists")
 	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx)
 	if err != nil {
 		return err
@@ -338,6 +339,7 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 			return err
 		}
 
+		worker.Logger.Infof("deleting ip list %s", IPList.Name)
 		_, err = worker.getAPI().DeleteIPList(worker.Ctx, *id)
 		if err != nil {
 			return err
@@ -347,6 +349,8 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 }
 
 func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) error {
+	worker.Logger.Info("removing ip list dependencies")
+	worker.Logger.Info("listing zones")
 	zones, err := worker.getAPI().ListZones(worker.Ctx)
 	if err != nil {
 		return err
@@ -357,13 +361,15 @@ func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) erro
 		zoneIDs[i] = zone.ID
 	}
 
-	worker.Logger.Debugf("found %d zones on this account", len(zones))
+	worker.Logger.Infof("found %d zones on this account", len(zones))
+	worker.Logger.Infof("deleting rules containing $%s", IPListName)
 	err = worker.deleteRulesContainingStringFromZoneIDs(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
 	}
 	// A Filter can exist on it's own, they are not visible on UI, they are API only.
 	// Clear these Filters.
+	worker.Logger.Infof("deleting filters containing $%s", IPListName)
 	err = worker.deleteFiltersContainingStringFromZoneIDs(fmt.Sprintf("$%s", IPListName), zoneIDs)
 	if err != nil {
 		return err
