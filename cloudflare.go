@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -127,6 +129,7 @@ type cloudflareAPI interface {
 	Filters(ctx context.Context, zoneID string, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Filter, error)
 	ListZones(ctx context.Context, z ...string) ([]cloudflare.Zone, error)
 	CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error)
+	CreateIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error)
 	DeleteIPList(ctx context.Context, id string) (cloudflare.IPListDeleteResponse, error)
 	ListIPLists(ctx context.Context) ([]cloudflare.IPList, error)
 	CreateFirewallRules(ctx context.Context, zone string, rules []cloudflare.FirewallRule) ([]cloudflare.FirewallRule, error)
@@ -134,8 +137,11 @@ type cloudflareAPI interface {
 	FirewallRules(ctx context.Context, zone string, opts cloudflare.PaginationOptions) ([]cloudflare.FirewallRule, error)
 	CreateIPListItems(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) ([]cloudflare.IPListItem, error)
 	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error)
+	DeleteIPListItemsAsync(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) (cloudflare.IPListItemDeleteResponse, error)
 	DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
+	GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error)
+	ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error)
 }
 
 func min(a int, b int) int {
@@ -145,9 +151,39 @@ func min(a int, b int) int {
 	return a
 }
 
+//Taken from the cloudflare-go library
+func (worker *CloudflareWorker) pollIPListBulkOperation(ctx context.Context, id string) error {
+	var i uint8
+	for i = 0; i < 16; i++ {
+		time.Sleep(0x1 << uint8(math.Ceil(float64(i/2))) * time.Second)
+
+		bulkResult, err := worker.getAPI().GetIPListBulkOperation(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		switch bulkResult.Status {
+		case "failed":
+			return errors.New(bulkResult.Error)
+		case "pending", "running":
+			continue
+		case "completed":
+			return nil
+		default:
+			return fmt.Errorf("bulk operation returned an unexpected status: %s", bulkResult.Status)
+		}
+	}
+
+	return errors.New("bulk operation did not finish before timeout")
+}
+
 func normalizeDecisionValue(value string) string {
 	if strings.Count(value, ":") <= 1 {
 		// it is a ipv4
+		// Cloudflare does not allow duplicates, but LAPI can send us "duplicates" (e.g. 1.2.3.4 and 1.2.3.4/32)
+		if strings.HasSuffix(value, "/32") {
+			return value[:len(value)-3]
+		}
 		return value
 	}
 	var address *net.IPNet
@@ -410,14 +446,32 @@ func (worker *CloudflareWorker) AddNewIPs() error {
 			}
 		}
 		if len(newIPs) > 0 {
-			items, err := worker.getAPI().CreateIPListItems(worker.Ctx, state.IPListState.IPList.ID, newIPs)
+			ret, err := worker.getAPI().CreateIPListItemsAsync(worker.Ctx, state.IPListState.IPList.ID, newIPs)
 			if err != nil {
 				return err
 			}
 			worker.Logger.Infof("banned %d IPs", len(newIPs))
-			for _, item := range items {
-				worker.CFStateByAction[action].IPListState.ItemByIP[item.IP] = item
-			}
+			go func() {
+				start := time.Now()
+				worker.Logger.Debugf("Starting poll for operation %s", ret.Result.OperationID)
+				err := worker.pollIPListBulkOperation(worker.Ctx, ret.Result.OperationID)
+				if err != nil {
+					worker.Logger.Errorf("error %s in polling IP list bulk operation", err.Error())
+					return
+				}
+				worker.Logger.Debugf("Polling operation %s took %s", ret.Result.OperationID, time.Since(start))
+				start = time.Now()
+				items, err := worker.getAPI().ListIPListItems(worker.Ctx, state.IPListState.IPList.ID)
+				if err != nil {
+					worker.Logger.Errorf("error %s in listing IP list, not updating internal state", err.Error())
+					return
+				}
+				worker.Logger.Debugf("Listing operation took %s", time.Since(start))
+				for _, item := range items {
+					worker.CFStateByAction[action].IPListState.ItemByIP[item.IP] = item
+				}
+			}()
+
 		}
 
 	}
@@ -451,7 +505,8 @@ func (worker *CloudflareWorker) DeleteIPs() error {
 		}
 
 		if len(deleteIPs.Items) > 0 {
-			_, err := worker.getAPI().DeleteIPListItems(worker.Ctx, state.IPListState.IPList.ID, deleteIPs)
+			// do we need to poll the status of the response ?
+			_, err := worker.getAPI().DeleteIPListItemsAsync(worker.Ctx, state.IPListState.IPList.ID, deleteIPs)
 			if err != nil {
 				return err
 			}
@@ -716,6 +771,7 @@ func (worker *CloudflareWorker) UpdateRules() error {
 			}
 			if len(updatedFilters) > 0 {
 				zoneLogger.Infof("updating %d rules", len(updatedFilters))
+				zoneLogger.Debugf("updated filters: %+v", updatedFilters)
 				_, err := worker.getAPI().UpdateFilters(worker.Ctx, zone.ID, updatedFilters)
 				if err != nil {
 					return err
