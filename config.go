@@ -40,6 +40,7 @@ type bouncerConfig struct {
 	LogMode                     string           `yaml:"log_mode"`
 	LogDir                      string           `yaml:"log_dir"`
 	LogLevel                    log.Level        `yaml:"log_level"`
+	CachePath                   string           `yaml:"cache_path"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
@@ -118,6 +119,10 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		log.SetFormatter(&log.TextFormatter{TimestampFormat: "02-01-2006 15:04:05", FullTimestamp: true})
 	} else if config.LogMode != "stdout" {
 		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
+	}
+
+	if config.CachePath == "" {
+		config.CachePath = "/etc/crowdsec/bouncers/cloudflare-cache.json"
 	}
 
 	return config, nil

@@ -31,8 +31,6 @@ const (
 	name = "crowdsec-cloudflare-bouncer"
 )
 
-var cachePath string = "/etc/crowdsec/bouncers/cloudflare-cache.json"
-
 func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
@@ -51,7 +49,7 @@ func HandleSignals() {
 	os.Exit(code)
 }
 
-func loadCachedStates(states *[]CloudflareState) error {
+func loadCachedStates(states *[]CloudflareState, cachePath string) error {
 	if _, err := os.Stat(cachePath); err != nil {
 		log.Debug("no cache found")
 		return nil
@@ -69,7 +67,7 @@ func loadCachedStates(states *[]CloudflareState) error {
 	return err
 }
 
-func dumpStates(states *[]CloudflareState) error {
+func dumpStates(states *[]CloudflareState, cachePath string) error {
 	data, err := json.MarshalIndent(states, "", "	")
 	if err != nil {
 		return err
@@ -81,7 +79,7 @@ func dumpStates(states *[]CloudflareState) error {
 	return nil
 }
 
-func deleteCacheIfExists() error {
+func deleteCacheIfExists(cachePath string) error {
 	var err error
 	if _, err = os.Stat(cachePath); err == nil {
 		err = os.Remove(cachePath)
@@ -184,7 +182,7 @@ func main() {
 	workerStates := make([]CloudflareState, 0)
 	APICountByToken := make(map[string]*uint32)
 
-	err = loadCachedStates(&workerStates)
+	err = loadCachedStates(&workerStates, conf.CachePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -293,7 +291,7 @@ func main() {
 				}
 			}
 			updateStates(&workerStates, newStates)
-			err := dumpStates(&workerStates)
+			err := dumpStates(&workerStates, conf.CachePath)
 			log.Debug("updated cache")
 			if err != nil {
 				log.Error(err)
@@ -311,7 +309,7 @@ func main() {
 	if conf.Daemon {
 		sent, err := daemon.SdNotify(false, "READY=1")
 		if !sent && err != nil {
-			log.Fatalf("failed to notify: %v", err)
+			log.Warnf("failed to notify: %v", err)
 		}
 		go HandleSignals()
 	}
@@ -337,7 +335,7 @@ func main() {
 			if *onlySetup || *delete {
 				stateTomb.Wait()
 				if *delete {
-					err = deleteCacheIfExists()
+					err = deleteCacheIfExists(conf.CachePath)
 					if err != nil {
 						log.Errorf("while deleting cache got %s", err.Error())
 					}
