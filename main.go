@@ -161,13 +161,15 @@ func main() {
 	}
 
 	var APILogger *log.Logger = log.New()
-	// if *logAPIRequests {
-	f, err := os.OpenFile("/var/log/crowdsec-cloudflare-bouncer-api_requests.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
+	if *logAPIRequests {
+		f, err := os.OpenFile("/var/log/crowdsec-cloudflare-bouncer-api_requests.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		APILogger.SetOutput(f)
+	} else {
+		APILogger.SetOutput(io.Discard)
 	}
-	APILogger.SetOutput(f)
-	// }
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 
@@ -197,7 +199,9 @@ func main() {
 
 	err = loadCachedStates(&workerStates)
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("invalid cache: %s", err.Error())
+		log.Info("cache is ignored")
+		workerStates = make([]CloudflareState, 0)
 	}
 
 	for _, account := range conf.CloudflareConfig.Accounts {
