@@ -164,6 +164,10 @@ type cloudflareAPI interface {
 func normalizeDecisionValue(value string) string {
 	if strings.Count(value, ":") <= 1 {
 		// it is a ipv4
+		// Cloudflare does not allow duplicates, but LAPI can send us "duplicates" (e.g. 1.2.3.4 and 1.2.3.4/32)
+		if strings.HasSuffix(value, "/32") {
+			return value[:len(value)-3]
+		}
 		return value
 	}
 	var address *net.IPNet

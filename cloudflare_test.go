@@ -109,7 +109,11 @@ func (cfAPI *mockCloudflareAPI) FirewallRules(ctx context.Context, zone string, 
 	return cfAPI.FirewallRulesList, nil
 }
 
-func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) ([]cloudflare.IPListItem, error) {
+func (cfAPI *mockCloudflareAPI) GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error) {
+	return cloudflare.IPListBulkOperation{Status: "completed"}, nil
+}
+
+func (cfAPI *mockCloudflareAPI) ReplaceIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error) {
 	IPItems := make([]cloudflare.IPListItem, len(items))
 	for j := range cfAPI.IPLists {
 		if cfAPI.IPLists[j].ID == id {
@@ -120,34 +124,8 @@ func (cfAPI *mockCloudflareAPI) CreateIPListItems(ctx context.Context, id string
 	for i := range items {
 		IPItems[i] = cloudflare.IPListItem{IP: items[i].IP}
 	}
-
-	cfAPI.IPListItems[id] = append(cfAPI.IPListItems[id], IPItems...)
-	return cfAPI.IPListItems[id], nil
-}
-
-func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
-	for j := range cfAPI.IPLists {
-		if cfAPI.IPLists[j].ID == id {
-			cfAPI.IPLists[j].NumItems -= len(items.Items)
-			break
-		}
-	}
-	rm := make([]bool, len(cfAPI.IPListItems[id]))
-	for _, item := range items.Items {
-		for j, currItem := range cfAPI.IPListItems[id] {
-			if currItem.ID == item.ID {
-				rm[j] = true
-			}
-		}
-	}
-	newItems := make([]cloudflare.IPListItem, 0)
-	for i, item := range cfAPI.IPListItems[id] {
-		if !rm[i] {
-			newItems = append(newItems, item)
-		}
-	}
-	cfAPI.IPListItems[id] = newItems
-	return cfAPI.IPListItems[id], nil
+	cfAPI.IPListItems[id] = IPItems
+	return cloudflare.IPListItemCreateResponse{}, nil
 }
 
 var dummyCFAccount AccountConfig = AccountConfig{
@@ -860,8 +838,8 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 		"block": {
 			AccountID: dummyCFAccount.ID,
 			IPListState: IPListState{
-				ItemByIP: make(map[string]cloudflare.IPListItem),
-				IPList:   &cloudflare.IPList{},
+				IPSet:  make(map[string]struct{}),
+				IPList: &cloudflare.IPList{},
 			},
 		},
 	}
@@ -875,7 +853,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string]cloudflare.IPListItem
+		want   map[string]struct{}
 	}{
 		{
 			name: "supported ip decision",
@@ -887,10 +865,8 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]cloudflare.IPListItem{
-				"1.2.3.4": {
-					IP: "1.2.3.4",
-				},
+			want: map[string]struct{}{
+				"1.2.3.4": {},
 			},
 		},
 		{
@@ -903,10 +879,8 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]cloudflare.IPListItem{
-				"1.2.3.4": {
-					IP: "1.2.3.4",
-				},
+			want: map[string]struct{}{
+				"1.2.3.4": {},
 			},
 		},
 	}
@@ -921,13 +895,14 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
 				tokenCallCount:  &mockAPICallCounter,
+				UpdatedState:    make(chan map[string]*CloudflareState, 100),
 			}
-			err := worker.AddNewIPs()
+			err := worker.UpdateIPLists()
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
-				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
+			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
+				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
 		})
 	}
@@ -944,15 +919,9 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 		"block": {
 			AccountID: dummyCFAccount.ID,
 			IPListState: IPListState{
-				ItemByIP: map[string]cloudflare.IPListItem{
-					"1.2.3.4": {
-						IP: "1.2.3.4",
-						ID: "1",
-					},
-					"1.2.3.5": {
-						IP: "1.2.3.5",
-						ID: "2",
-					},
+				IPSet: map[string]struct{}{
+					"1.2.3.4": {},
+					"1.2.3.5": {},
 				},
 				IPList: &cloudflare.IPList{},
 			},
@@ -968,7 +937,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string]cloudflare.IPListItem
+		want   map[string]struct{}
 	}{
 		{
 			name: "supported ip decision",
@@ -980,11 +949,8 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]cloudflare.IPListItem{
-				"1.2.3.5": {
-					IP: "1.2.3.5",
-					ID: "2",
-				},
+			want: map[string]struct{}{
+				"1.2.3.5": {},
 			},
 		},
 		{
@@ -997,11 +963,8 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]cloudflare.IPListItem{
-				"1.2.3.5": {
-					IP: "1.2.3.5",
-					ID: "2",
-				},
+			want: map[string]struct{}{
+				"1.2.3.5": {},
 			},
 		},
 	}
@@ -1016,13 +979,14 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:              promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test2%d", i), Help: "no help you're just a test"}),
 				tokenCallCount:     &mockAPICallCounter,
+				UpdatedState:       make(chan map[string]*CloudflareState, 100),
 			}
-			err := worker.DeleteIPs()
+			err := worker.UpdateIPLists()
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP) {
-				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.ItemByIP)
+			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
+				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
 		})
 	}
