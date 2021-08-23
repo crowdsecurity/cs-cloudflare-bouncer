@@ -160,7 +160,7 @@ func main() {
 
 	var APILogger *log.Logger = log.New()
 	if *logAPIRequests {
-		f, err := os.OpenFile("/var/log/crowdsec-cloudflare-bouncer-api_requests.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		f, err := os.OpenFile(conf.LogDir+"/crowdsec-cloudflare-bouncer-api-calls.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}

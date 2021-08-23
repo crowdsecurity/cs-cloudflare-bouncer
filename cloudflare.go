@@ -560,10 +560,10 @@ func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) 
 		if err != nil {
 			return nil, err
 		}
-		lrt.logger.Infof("%s  %s", req.URL, string(body))
+		lrt.logger.Debugf("%s  %s", req.URL, string(body))
 		req.Body = io.NopCloser(&buf)
 	} else {
-		lrt.logger.Infof("%s ", req.URL)
+		lrt.logger.Debugf("%s ", req.URL)
 	}
 	res, e := lrt.Tripper.RoundTrip(req)
 	return res, e
