@@ -40,7 +40,7 @@ type bouncerConfig struct {
 	LogMode                     string           `yaml:"log_mode"`
 	LogDir                      string           `yaml:"log_dir"`
 	LogLevel                    log.Level        `yaml:"log_level"`
-	CachePath                   string           `yaml:"cache_path"`
+	CachePath                   string           `yaml:"cache_path,omitempty"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
