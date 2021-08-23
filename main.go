@@ -31,8 +31,6 @@ const (
 	name = "crowdsec-cloudflare-bouncer"
 )
 
-var cachePath string = "/etc/crowdsec/bouncers/cloudflare-cache.json"
-
 func HandleSignals() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
@@ -51,7 +49,7 @@ func HandleSignals() {
 	os.Exit(code)
 }
 
-func loadCachedStates(states *[]CloudflareState) error {
+func loadCachedStates(states *[]CloudflareState, cachePath string) error {
 	if _, err := os.Stat(cachePath); err != nil {
 		log.Debug("no cache found")
 		return nil
@@ -69,7 +67,7 @@ func loadCachedStates(states *[]CloudflareState) error {
 	return err
 }
 
-func dumpStates(states *[]CloudflareState) error {
+func dumpStates(states *[]CloudflareState, cachePath string) error {
 	data, err := json.MarshalIndent(states, "", "	")
 	if err != nil {
 		return err
@@ -81,7 +79,7 @@ func dumpStates(states *[]CloudflareState) error {
 	return nil
 }
 
-func deleteCacheIfExists() error {
+func deleteCacheIfExists(cachePath string) error {
 	var err error
 	if _, err = os.Stat(cachePath); err == nil {
 		err = os.Remove(cachePath)
@@ -117,6 +115,8 @@ func main() {
 	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
 	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
 	ver := flag.Bool("v", false, "Display version information and exit")
+	logAPIRequests := flag.Bool("lc", false, "logs API requests")
+
 	flag.Parse()
 
 	if *ver {
@@ -148,6 +148,7 @@ func main() {
 		fmt.Print(cfg)
 		return
 	}
+
 	conf, err := NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
@@ -157,6 +158,16 @@ func main() {
 		log.SetOutput(os.Stdout)
 	}
 
+	var APILogger *log.Logger = log.New()
+	if *logAPIRequests {
+		f, err := os.OpenFile(conf.LogDir+"/crowdsec-cloudflare-bouncer-api-calls.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		APILogger.SetOutput(f)
+	} else {
+		APILogger.SetOutput(io.Discard)
+	}
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 
@@ -184,9 +195,11 @@ func main() {
 	workerStates := make([]CloudflareState, 0)
 	APICountByToken := make(map[string]*uint32)
 
-	err = loadCachedStates(&workerStates)
+	err = loadCachedStates(&workerStates, conf.CachePath)
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("invalid cache: %s", err.Error())
+		log.Info("cache is ignored")
+		workerStates = make([]CloudflareState, 0)
 	}
 
 	for _, account := range conf.CloudflareConfig.Accounts {
@@ -208,6 +221,7 @@ func main() {
 		wg.Add(1)
 		worker := CloudflareWorker{
 			Account:         account,
+			APILogger:       APILogger,
 			Ctx:             ctx,
 			ZoneLocks:       zoneLocks,
 			LAPIStream:      lapiStream,
@@ -293,7 +307,7 @@ func main() {
 				}
 			}
 			updateStates(&workerStates, newStates)
-			err := dumpStates(&workerStates)
+			err := dumpStates(&workerStates, conf.CachePath)
 			log.Debug("updated cache")
 			if err != nil {
 				log.Error(err)
@@ -311,7 +325,7 @@ func main() {
 	if conf.Daemon {
 		sent, err := daemon.SdNotify(false, "READY=1")
 		if !sent && err != nil {
-			log.Fatalf("failed to notify: %v", err)
+			log.Warnf("failed to notify: %v", err)
 		}
 		go HandleSignals()
 	}
@@ -337,7 +351,7 @@ func main() {
 			if *onlySetup || *delete {
 				stateTomb.Wait()
 				if *delete {
-					err = deleteCacheIfExists()
+					err = deleteCacheIfExists(conf.CachePath)
 					if err != nil {
 						log.Errorf("while deleting cache got %s", err.Error())
 					}

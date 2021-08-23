@@ -73,6 +73,7 @@ daemon: true
 log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
+cache_path: /etc/crowdsec/bouncers/cloudflare-cache.json
 ```
 
 ## Cloudflare Configuration:
