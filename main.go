@@ -165,6 +165,7 @@ func main() {
 			log.Fatal(err)
 		}
 		APILogger.SetOutput(f)
+		APILogger.Level = log.DebugLevel
 	} else {
 		APILogger.SetOutput(io.Discard)
 	}
