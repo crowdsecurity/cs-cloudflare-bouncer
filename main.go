@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -326,11 +327,13 @@ func main() {
 		}
 	})
 
-	serverTomb.Go(func() error {
-		http.Handle("/metrics", promhttp.Handler())
-		err := http.ListenAndServe(":2112", nil)
-		return err
-	})
+	if conf.PrometheusConfig.Enabled {
+		serverTomb.Go(func() error {
+			http.Handle("/metrics", promhttp.Handler())
+			err := http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil)
+			return err
+		})
+	}
 
 	if conf.Daemon {
 		sent, err := daemon.SdNotify(false, "READY=1")

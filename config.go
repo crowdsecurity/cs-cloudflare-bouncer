@@ -30,6 +30,11 @@ type CloudflareConfig struct {
 	Accounts        []AccountConfig `yaml:"accounts"`
 	UpdateFrequency time.Duration   `yaml:"update_frequency"`
 }
+type PrometheusConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	ListenAddress string `yaml:"listen_addr"`
+	ListenPort    string `yaml:"listen_port"`
+}
 
 type bouncerConfig struct {
 	CrowdSecLAPIUrl             string           `yaml:"crowdsec_lapi_url"`
@@ -41,6 +46,7 @@ type bouncerConfig struct {
 	LogDir                      string           `yaml:"log_dir"`
 	LogLevel                    log.Level        `yaml:"log_level"`
 	CachePath                   string           `yaml:"cache_path,omitempty"`
+	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
