@@ -75,6 +75,11 @@ log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
 cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
+
+prometheus:
+  enabled: true
+  listen_addr: 127.0.0.1
+  listen_port: 2112
 ```
 
 ## Cloudflare Configuration:
