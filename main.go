@@ -19,8 +19,6 @@ import (
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/version"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -186,10 +184,6 @@ func main() {
 	var stateTomb tomb.Tomb
 
 	var wg sync.WaitGroup
-	var Count prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "cloudflare_api_calls",
-		Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
-	})
 
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
@@ -231,7 +225,6 @@ func main() {
 			Wg:              &wg,
 			UpdatedState:    stateStream,
 			CFStateByAction: states,
-			Count:           Count,
 			tokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
@@ -313,7 +306,7 @@ func main() {
 			log.Debug("updated cache")
 			if err != nil {
 				log.Error(err)
-				return err
+				return err	
 			}
 		}
 	})

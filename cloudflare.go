@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -29,6 +30,22 @@ var CloudflareActionByDecisionType = map[string]string{
 	"ban":          "block",
 	"js_challenge": "js_challenge",
 }
+
+var totalAPICalls int
+
+var ResponseTime prometheus.Histogram = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "response_time",
+	Help:    "response time by cloudflare",
+	Buckets: prometheus.LinearBuckets(0, 100, 50),
+},
+)
+
+var TotalAPICalls prometheus.CounterFunc = promauto.NewCounterFunc(prometheus.CounterOpts{
+	Name: "cloudflare_api_calls",
+	Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
+},
+	func() float64 { return float64(totalAPICalls) },
+)
 
 type ZoneLock struct {
 	Lock   *sync.Mutex
@@ -235,7 +252,7 @@ func (worker *CloudflareWorker) getAPI() cloudflareAPI {
 	if *worker.tokenCallCount > CallsPerSecondLimit {
 		time.Sleep(time.Second)
 	}
-	worker.Count.Inc()
+	totalAPICalls++
 	return worker.API
 }
 
@@ -565,7 +582,10 @@ func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) 
 	} else {
 		lrt.logger.Debugf("%s ", req.URL)
 	}
+	beginTime := time.Now()
 	res, e := lrt.Tripper.RoundTrip(req)
+	finishTime := time.Now()
+	ResponseTime.Observe(float64(finishTime.Sub(beginTime).Milliseconds()))
 	return res, e
 }
 
