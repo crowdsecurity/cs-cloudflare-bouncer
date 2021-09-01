@@ -481,13 +481,16 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 		}
 	}
 
-	for action, state := range newIPSetByAction {
-		if reflect.DeepEqual(worker.CFStateByAction[action].IPListState.IPSet, state) || len(state) == 0 {
+	for action, set := range newIPSetByAction {
+		if reflect.DeepEqual(worker.CFStateByAction[action].IPListState.IPSet, set) {
 			log.Info("no changes to IP rules ")
 			continue
 		}
+		if len(set) == 0 {
+			set["10.0.0.1"] = struct{}{}
+		}
 		req := make([]cloudflare.IPListItemCreateRequest, 0)
-		for ip := range state {
+		for ip := range set {
 			req = append(req, cloudflare.IPListItemCreateRequest{
 				IP: ip,
 			})
@@ -513,10 +516,10 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			}
 			time.Sleep(time.Second)
 		}
-		newItemCount, deletedItemCount := calculateSetDiff(state, worker.CFStateByAction[action].IPListState.IPSet)
+		newItemCount, deletedItemCount := calculateSetDiff(set, worker.CFStateByAction[action].IPListState.IPSet)
 		log.Infof("added %d new IPs and deleted %d IPs", newItemCount, deletedItemCount)
-		worker.CFStateByAction[action].IPListState.IPSet = state
-		worker.CFStateByAction[action].IPListState.IPList.NumItems = len(state)
+		worker.CFStateByAction[action].IPListState.IPSet = set
+		worker.CFStateByAction[action].IPListState.IPList.NumItems = len(set)
 	}
 
 	worker.UpdatedState <- worker.CFStateByAction
