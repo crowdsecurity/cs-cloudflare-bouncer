@@ -176,6 +176,9 @@ type cloudflareAPI interface {
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
 	ReplaceIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error)
 	GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error)
+	ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error)
+	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) (
+		[]cloudflare.IPListItem, error)
 }
 
 func normalizeDecisionValue(value string) string {
@@ -487,7 +490,32 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			continue
 		}
 		if len(set) == 0 {
+			// The ReplaceIPListItemsAsync method doesn't allow to empty the list.
+			// Hence we only add one mock IP and later delete it.
 			set["10.0.0.1"] = struct{}{}
+			defer func(action string) {
+				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
+				items, err := worker.getAPI().ListIPListItems(worker.Ctx, ipListId)
+				if err != nil {
+					worker.Logger.Error(err)
+					return
+				}
+				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, ipListId, cloudflare.IPListItemDeleteRequest{
+					Items: []cloudflare.IPListItemDeleteItemRequest{
+						{
+							ID: items[0].ID,
+						},
+					},
+				})
+				if err != nil {
+					worker.Logger.Error(err)
+				}
+				worker.CFStateByAction[action].IPListState.IPSet = make(map[string]struct{})
+				worker.CFStateByAction[action].IPListState.IPList.NumItems = 0
+				worker.UpdatedState <- worker.CFStateByAction
+				worker.Logger.Info("removed mock IP")
+
+			}(action)
 		}
 		req := make([]cloudflare.IPListItemCreateRequest, 0)
 		for ip := range set {
