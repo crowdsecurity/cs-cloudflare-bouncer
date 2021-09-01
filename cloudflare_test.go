@@ -94,6 +94,37 @@ func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string
 	return nil
 }
 
+func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
+	for j := range cfAPI.IPLists {
+		if cfAPI.IPLists[j].ID == id {
+			cfAPI.IPLists[j].NumItems -= len(items.Items)
+			break
+		}
+	}
+	rm := make([]bool, len(cfAPI.IPListItems[id]))
+	for _, item := range items.Items {
+		for j, currItem := range cfAPI.IPListItems[id] {
+			if currItem.ID == item.ID {
+				rm[j] = true
+			}
+		}
+	}
+	newItems := make([]cloudflare.IPListItem, 0)
+	for i, item := range cfAPI.IPListItems[id] {
+		if !rm[i] {
+			newItems = append(newItems, item)
+		}
+	}
+	cfAPI.IPListItems[id] = newItems
+	return cfAPI.IPListItems[id], nil
+}
+
+func (cfAPI *mockCloudflareAPI) ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error) {
+	return []cloudflare.IPListItem{
+		{ID: "1234"},
+	}, nil
+}
+
 func (cfAPI *mockCloudflareAPI) UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error) {
 	for _, f := range filters {
 		for j := range cfAPI.FilterList {

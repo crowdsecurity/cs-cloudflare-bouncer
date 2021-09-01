@@ -31,8 +31,6 @@ var CloudflareActionByDecisionType = map[string]string{
 	"js_challenge": "js_challenge",
 }
 
-var totalAPICalls int
-
 var ResponseTime prometheus.Histogram = promauto.NewHistogram(prometheus.HistogramOpts{
 	Name:    "response_time",
 	Help:    "response time by cloudflare",
@@ -40,11 +38,10 @@ var ResponseTime prometheus.Histogram = promauto.NewHistogram(prometheus.Histogr
 },
 )
 
-var TotalAPICalls prometheus.CounterFunc = promauto.NewCounterFunc(prometheus.CounterOpts{
+var TotalAPICalls prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "cloudflare_api_calls",
 	Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
 },
-	func() float64 { return float64(totalAPICalls) },
 )
 
 type ZoneLock struct {
@@ -255,7 +252,7 @@ func (worker *CloudflareWorker) getAPI() cloudflareAPI {
 	if *worker.tokenCallCount > CallsPerSecondLimit {
 		time.Sleep(time.Second)
 	}
-	totalAPICalls++
+	TotalAPICalls.Inc()
 	return worker.API
 }
 
