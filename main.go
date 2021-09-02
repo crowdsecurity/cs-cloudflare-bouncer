@@ -306,7 +306,7 @@ func main() {
 			log.Debug("updated cache")
 			if err != nil {
 				log.Error(err)
-				return err	
+				return err
 			}
 		}
 	})

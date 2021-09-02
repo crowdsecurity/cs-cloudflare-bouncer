@@ -488,7 +488,10 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 		}
 		if len(set) == 0 {
 			// The ReplaceIPListItemsAsync method doesn't allow to empty the list.
-			// Hence we only add one mock IP and later delete it.
+			// Hence we only add one mock IP and later delete it. To do this we add the mock IP
+			// in the set and continue as usual, and end up with 1 item in the IP list. Then the
+			// defer call takes care of cleaning up the extra IP.
+			worker.Logger.Warningf("emptying IP list for %s action", action)
 			set["10.0.0.1"] = struct{}{}
 			defer func(action string) {
 				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
@@ -510,7 +513,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 				worker.CFStateByAction[action].IPListState.IPSet = make(map[string]struct{})
 				worker.CFStateByAction[action].IPListState.IPList.NumItems = 0
 				worker.UpdatedState <- worker.CFStateByAction
-				worker.Logger.Info("removed mock IP")
+				worker.Logger.Infof("emptied IP list for %s action", action)
 
 			}(action)
 		}
