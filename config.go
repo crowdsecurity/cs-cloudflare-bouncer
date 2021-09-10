@@ -122,7 +122,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 
 	if config.CachePath == "" {
-		config.CachePath = "/var/lib/crowdsec/cache/cloudflare-cache.json"
+		config.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
 	}
 
 	return config, nil

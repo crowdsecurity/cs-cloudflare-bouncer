@@ -4,7 +4,7 @@ BIN_PATH="./crowdsec-cloudflare-bouncer"
 CONFIG_DIR="/etc/crowdsec/bouncers/"
 PID_DIR="/var/run/crowdsec/"
 SYSTEMD_PATH_FILE="/etc/systemd/system/crowdsec-cloudflare-bouncer.service"
-CACHE_DIR="/var/lib/crowdsec/cache/"
+CACHE_DIR="/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/"
 
 LAPI_KEY=""
 
