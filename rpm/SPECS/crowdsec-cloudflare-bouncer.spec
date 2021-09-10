@@ -9,7 +9,6 @@ Source0:        https://github.com/crowdsecurity/%{name}/archive/v%(echo $VERSIO
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  git
-BuildRequires:  golang >= 1.14
 BuildRequires:  make
 %{?fc33:BuildRequires: systemd-rpm-macros}
 
