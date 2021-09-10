@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+
+export DEB_VERSION=$(shell dpkg-parsechangelog | egrep '^Version:' | cut -f 2 -d ' ')
+export BUILD_VERSION=v${DEB_VERSION}-debian-pragmatic
+export GO111MODULE=on
+
+
+%:
+	dh $@
+
+override_dh_systemd_start:
+	echo "Not running dh_systemd_start"
+override_dh_auto_clean:
+override_dh_auto_test:
+override_dh_auto_build:
+override_dh_auto_install:
+	make
+	mkdir -p debian/crowdsec-cloudflare-bouncer/usr/bin
+	cp crowdsec-cloudflare-bouncer  debian/crowdsec-cloudflare-bouncer/usr/bin
+	mkdir -p debian/crowdsec-cloudflare-bouncer/etc/systemd/system/
+	mkdir -p debian/crowdsec-cloudflare-bouncer/etc/crowdsec/bouncers/
+	BIN=/usr/bin/crowdsec-cloudflare-bouncer CFG=/etc/crowdsec/bouncers envsubst < config/crowdsec-cloudflare-bouncer.service >  debian/crowdsec-cloudflare-bouncer/etc/systemd/system/crowdsec-cloudflare-bouncer.service
+	cp config/crowdsec-cloudflare-bouncer.yaml debian/crowdsec-cloudflare-bouncer/etc/crowdsec/bouncers/
