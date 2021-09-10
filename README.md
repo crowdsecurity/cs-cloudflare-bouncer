@@ -24,7 +24,8 @@ Download the [latest release](https://github.com/crowdsecurity/cs-cloudflare-bou
 tar xzvf crowdsec-cloudflare-bouncer.tgz
 cd crowdsec-cloudflare-bouncer/
 sudo ./install.sh
-sudo crowdsec-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
+sudo crowdsec-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> -o cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
+sudo vi cfg.yaml # make changes as needed
 sudo cat cfg.yaml > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml # Verify the generated config and paste it in bouncer's config.
 sudo crowdsec-cloudflare-bouncer -s # this sets up IP lists and firewall rules at cloudflare for the provided config. 
 sudo systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec decisions with cloudflare components.
@@ -101,7 +102,8 @@ Generates bouncer config by discovering all the accounts and the zones associate
 Example Usage:
 
 ```bash
-/usr/local/bin/crowdsec-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... > cfg.yaml
+/usr/local/bin/crowdsec-cloudflare-bouncer -g <TOKEN_1>,<TOKEN_2>... -o ./cfg.yaml 
+vi cfg.yaml # make changes as needed
 cat cfg.yaml  > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
 ```
 
@@ -111,6 +113,8 @@ Using custom config:
 ```bash
 /usr/local/bin/crowdsec-cloudflare-bouncer -c ./cfg.yaml -g <TOKEN_1>,<TOKEN_2>... 
 ```
+
+Output can be redirected to file provided by the `-o` flag. If the `-o` flag is absent generated config would be printed to stdout
 
 ### Cloudflare Setup: 
 

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -111,6 +112,7 @@ func main() {
 	// Each cf routine maintains it's own IP list and cache.
 
 	configTokens := flag.String("g", "", "comma separated tokens to generate config for")
+	configOutputPath := flag.String("o", "", "path to store generated config to")
 	configPath := flag.String("c", "", "path to config file")
 	onlySetup := flag.Bool("s", false, "only setup the ip lists and rules for cloudflare and exit")
 	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
@@ -145,7 +147,14 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Print(cfg)
+		if configOutputPath != nil && *configOutputPath != "" {
+			err := ioutil.WriteFile(*configOutputPath, []byte(cfg), 0664)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			fmt.Print(cfg)
+		}
 		return
 	}
 
