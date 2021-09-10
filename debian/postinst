@@ -12,7 +12,7 @@ if [ "$1" = "configure" ] && [ "$2" = "" ]; then
         START=1
         echo "cscli/crowdsec is present, generating API key"
         unique=`date +%s`
-        API_KEY=`cscli -oraw bouncers add CustomBouncer-${unique}`
+        API_KEY=`cscli -oraw bouncers add CloudflareBouncer-${unique}`
         if [ $? -eq 1 ] ; then
             echo "failed to create API token, service won't be started."
             START=0
@@ -32,7 +32,7 @@ fi
 
 
 if [ ${START} -eq 0 ] ; then
-    echo "no api key was generated, you can generate one on your LAPI Server by running 'cscli bouncers add <bouncer_name>"
+    echo "no api key was generated, you can generate one on your LAPI Server by running 'cscli bouncers add <bouncer_name>' and add it to '/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml'"
 fi
 
 echo "please enter your Cloudflare account ID and Token path in '/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml' and start the bouncer via 'sudo systemctl start crowdsec-cloudflare-bouncer' "
