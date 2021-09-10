@@ -1,0 +1,5 @@
+crowdsec-cloudflare-bouncer (1.0.0) UNRELEASED; urgency=medium
+
+  * Initial debian packaging
+  
+ -- Kevin Kadosh <kevin@crowdsec.net>  Fri, 10 Sep 2021 09:30:14 +0100

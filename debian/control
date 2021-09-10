@@ -1,0 +1,11 @@
+Source: crowdsec-cloudflare-bouncer
+Maintainer: Crowdsec Team <debian@crowdsec.net>
+Build-Depends: debhelper, bash
+
+Package: crowdsec-cloudflare-bouncer
+Provides: crowdsec-cloudflare-bouncer
+Description: Custom bouncer for Crowdsec
+Architecture: any
+
+
+

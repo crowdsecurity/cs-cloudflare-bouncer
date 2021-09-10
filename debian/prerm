@@ -1,0 +1,2 @@
+systemctl stop crowdsec-cloudflare-bouncer || echo "cannot stop service"
+systemctl disable crowdsec-cloudflare-bouncer || echo "cannot disable service"

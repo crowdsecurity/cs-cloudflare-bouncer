@@ -4,7 +4,7 @@ After=syslog.target crowdsec.service
 
 [Service]
 Type=notify
-ExecStart=${BIN} -c ${CFG}crowdsec-cloudflare-bouncer.yaml
+ExecStart=${BIN} -c ${CFG}/crowdsec-cloudflare-bouncer.yaml
 
 [Install]
 WantedBy=multi-user.target

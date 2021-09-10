@@ -1,13 +1,13 @@
 # CrowdSec Config
 crowdsec_lapi_url: http://localhost:8080/
-crowdsec_lapi_key: ${LAPI_KEY}
+crowdsec_lapi_key: ${API_KEY}
 crowdsec_update_frequency: 10s
 
 #Cloudflare Config. 
 cloudflare_config:
   accounts: 
-  - id: 
-    token: 
+  - id: <CLOUDFLARE_ACCOUNT_ID>
+    token: <CLOUDFLARE_TOKEN>
     ip_list_prefix: crowdsec
     default_action: challenge
     zones:
