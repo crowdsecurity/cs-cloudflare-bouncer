@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -29,6 +30,19 @@ var CloudflareActionByDecisionType = map[string]string{
 	"ban":          "block",
 	"js_challenge": "js_challenge",
 }
+
+var ResponseTime prometheus.Histogram = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "response_time",
+	Help:    "response time by cloudflare",
+	Buckets: prometheus.LinearBuckets(0, 100, 50),
+},
+)
+
+var TotalAPICalls prometheus.Counter = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "cloudflare_api_calls",
+	Help: "The total number of API calls to cloudflare made by CrowdSec bouncer",
+},
+)
 
 type ZoneLock struct {
 	Lock   *sync.Mutex
@@ -159,6 +173,9 @@ type cloudflareAPI interface {
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
 	ReplaceIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error)
 	GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error)
+	ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error)
+	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) (
+		[]cloudflare.IPListItem, error)
 }
 
 func normalizeDecisionValue(value string) string {
@@ -235,7 +252,7 @@ func (worker *CloudflareWorker) getAPI() cloudflareAPI {
 	if *worker.tokenCallCount > CallsPerSecondLimit {
 		time.Sleep(time.Second)
 	}
-	worker.Count.Inc()
+	TotalAPICalls.Inc()
 	return worker.API
 }
 
@@ -464,13 +481,44 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 		}
 	}
 
-	for action, state := range newIPSetByAction {
-		if reflect.DeepEqual(worker.CFStateByAction[action].IPListState.IPSet, state) || len(state) == 0 {
+	for action, set := range newIPSetByAction {
+		if reflect.DeepEqual(worker.CFStateByAction[action].IPListState.IPSet, set) {
 			log.Info("no changes to IP rules ")
 			continue
 		}
+		if len(set) == 0 {
+			// The ReplaceIPListItemsAsync method doesn't allow to empty the list.
+			// Hence we only add one mock IP and later delete it. To do this we add the mock IP
+			// in the set and continue as usual, and end up with 1 item in the IP list. Then the
+			// defer call takes care of cleaning up the extra IP.
+			worker.Logger.Warningf("emptying IP list for %s action", action)
+			set["10.0.0.1"] = struct{}{}
+			defer func(action string) {
+				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
+				items, err := worker.getAPI().ListIPListItems(worker.Ctx, ipListId)
+				if err != nil {
+					worker.Logger.Error(err)
+					return
+				}
+				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, ipListId, cloudflare.IPListItemDeleteRequest{
+					Items: []cloudflare.IPListItemDeleteItemRequest{
+						{
+							ID: items[0].ID,
+						},
+					},
+				})
+				if err != nil {
+					worker.Logger.Error(err)
+				}
+				worker.CFStateByAction[action].IPListState.IPSet = make(map[string]struct{})
+				worker.CFStateByAction[action].IPListState.IPList.NumItems = 0
+				worker.UpdatedState <- worker.CFStateByAction
+				worker.Logger.Infof("emptied IP list for %s action", action)
+
+			}(action)
+		}
 		req := make([]cloudflare.IPListItemCreateRequest, 0)
-		for ip := range state {
+		for ip := range set {
 			req = append(req, cloudflare.IPListItemCreateRequest{
 				IP: ip,
 			})
@@ -496,10 +544,10 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			}
 			time.Sleep(time.Second)
 		}
-		newItemCount, deletedItemCount := calculateSetDiff(state, worker.CFStateByAction[action].IPListState.IPSet)
+		newItemCount, deletedItemCount := calculateSetDiff(set, worker.CFStateByAction[action].IPListState.IPSet)
 		log.Infof("added %d new IPs and deleted %d IPs", newItemCount, deletedItemCount)
-		worker.CFStateByAction[action].IPListState.IPSet = state
-		worker.CFStateByAction[action].IPListState.IPList.NumItems = len(state)
+		worker.CFStateByAction[action].IPListState.IPSet = set
+		worker.CFStateByAction[action].IPListState.IPList.NumItems = len(set)
 	}
 
 	worker.UpdatedState <- worker.CFStateByAction
@@ -565,7 +613,10 @@ func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) 
 	} else {
 		lrt.logger.Debugf("%s ", req.URL)
 	}
+	beginTime := time.Now()
 	res, e := lrt.Tripper.RoundTrip(req)
+	finishTime := time.Now()
+	ResponseTime.Observe(float64(finishTime.Sub(beginTime).Milliseconds()))
 	return res, e
 }
 

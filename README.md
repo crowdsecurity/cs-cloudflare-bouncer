@@ -31,6 +31,35 @@ sudo crowdsec-cloudflare-bouncer -s # this sets up IP lists and firewall rules a
 sudo systemctl start crowdsec-cloudflare-bouncer # the bouncer now syncs the crowdsec decisions with cloudflare components.
 ```
 
+## Using Docker 
+
+Make sure you have docker or podman installed. In this guide we will use docker, but podman would work as a drop in replacement too.
+
+### Initial Setup
+
+```bash
+git clone https://github.com/crowdsecurity/cs-cloudflare-bouncer.git
+cd cs-cloudflare-bouncer
+docker build . -t cs-cloudflare-bouncer
+docker run cs-cloudflare-bouncer -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
+vi cfg.yaml # add the appropriate crowdsec_lapi_url and crowdsec_lapi_key values. Make sure LAPI is accessible from the container.
+```
+
+The `crowdsec_lapi_key` can be obtained by running the following:
+```bash
+sudo cscli -oraw bouncers add cloudflarebouncer # -oraw flag can discarded for human friendly output.
+```
+
+The `crowdsec_lapi_url` must be accessible from the container.
+
+### Run the bouncer:
+
+```bash
+docker run -v \
+          $PWD/cfg.yaml:/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml\
+          -p 2112:2112\
+           crowdflare
+```
 
 ## From source
 
@@ -75,6 +104,11 @@ log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
 cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
+
+prometheus:
+  enabled: true
+  listen_addr: 127.0.0.1
+  listen_port: 2112
 ```
 
 ## Cloudflare Configuration:
@@ -141,6 +175,7 @@ to update IP lists and firewall rules depending upon the decision.
 
 
 # Troubleshooting
+ - Metrics can be seen at http://localhost:2112/metrics
  - Logs are in `/var/log/crowdsec-cloudflare-bouncer.log`
  - The cache is at `/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
  - You can view/interact directly in the ban list either with `cscli`
