@@ -74,7 +74,7 @@ daemon: true
 log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
-cache_path: /etc/crowdsec/bouncers/cloudflare-cache.json
+cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 ```
 
 ## Cloudflare Configuration:
@@ -142,6 +142,6 @@ to update IP lists and firewall rules depending upon the decision.
 
 # Troubleshooting
  - Logs are in `/var/log/crowdsec-cloudflare-bouncer.log`
- - The cache is at `/etc/crowdsec/bouncers/cloudflare-cache.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
+ - The cache is at `/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json`. It can be inspected to see the state of bouncer and cloudflare components locally.
  - You can view/interact directly in the ban list either with `cscli`
  - Service can be started/stopped with `systemctl start/stop crowdsec-cloudflare-bouncer`
