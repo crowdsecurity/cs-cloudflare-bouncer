@@ -73,7 +73,7 @@ func dumpStates(states *[]CloudflareState, cachePath string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0750); err != nil {
 		return err
 	}
 	err = os.WriteFile(cachePath, data, 0660)
