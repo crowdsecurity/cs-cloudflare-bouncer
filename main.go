@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -72,7 +73,10 @@ func dumpStates(states *[]CloudflareState, cachePath string) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(cachePath, data, 0666)
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0777); err != nil {
+		return err
+	}
+	err = os.WriteFile(cachePath, data, 0660)
 	if err != nil {
 		return err
 	}
