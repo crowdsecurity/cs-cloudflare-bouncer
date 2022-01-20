@@ -87,6 +87,13 @@ func deleteCacheIfExists(cachePath string) error {
 	var err error
 	if _, err = os.Stat(cachePath); err == nil {
 		err = os.Remove(cachePath)
+		// cache can't deleted in case it's mounted to docker image.
+		// In such case try to atleast truncate it
+		log.Errorf("unable to delete cache: %v", err)
+		log.Info("attempting to truncate cache")
+		if err != nil {
+			err = os.Truncate(cachePath, 0)
+		}
 	}
 	return err
 }
