@@ -20,11 +20,12 @@ type ZoneConfig struct {
 	ActionSet map[string]struct{} `yaml:",omitempty"`
 }
 type AccountConfig struct {
-	ID            string       `yaml:"id"`
-	ZoneConfigs   []ZoneConfig `yaml:"zones"`
-	Token         string       `yaml:"token"`
-	IPListPrefix  string       `yaml:"ip_list_prefix"`
-	DefaultAction string       `yaml:"default_action"`
+	ID                  string       `yaml:"id"`
+	ZoneConfigs         []ZoneConfig `yaml:"zones"`
+	Token               string       `yaml:"token"`
+	IPListPrefix        string       `yaml:"ip_list_prefix"`
+	DefaultAction       string       `yaml:"default_action"`
+	TotalIPListCapacity *int         `yaml:"total_ip_list_capacity"`
 }
 type CloudflareConfig struct {
 	Accounts        []AccountConfig `yaml:"accounts"`
@@ -75,6 +76,10 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 
 		if account.Token == "" {
 			return nil, fmt.Errorf("the account '%s' is missing token", account.ID)
+		}
+
+		if account.TotalIPListCapacity == nil {
+			config.CloudflareConfig.Accounts[i].TotalIPListCapacity = &TotalIPListCapacity
 		}
 		if account.IPListPrefix == "" {
 			config.CloudflareConfig.Accounts[i].IPListPrefix = "crowdsec"
@@ -165,11 +170,12 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		}
 		for i, account := range accounts {
 			accountConfig = append(accountConfig, AccountConfig{
-				ID:            account.ID,
-				ZoneConfigs:   make([]ZoneConfig, 0),
-				Token:         token,
-				IPListPrefix:  "crowdsec",
-				DefaultAction: "challenge",
+				ID:                  account.ID,
+				ZoneConfigs:         make([]ZoneConfig, 0),
+				Token:               token,
+				IPListPrefix:        "crowdsec",
+				DefaultAction:       "challenge",
+				TotalIPListCapacity: &TotalIPListCapacity,
 			})
 
 			api.AccountID = account.ID
@@ -219,6 +225,8 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			line = fmt.Sprintf("%s #%s", line, zone.Name)
 		} else if account, ok := accountByID[lastWord]; ok {
 			line = fmt.Sprintf("%s #%s", line, account.Name)
+		} else if strings.Contains(line, "total_ip_list_capacity") {
+			line = fmt.Sprintf("%s #%s", line, " only this many latest IP decisions would be kept")
 		}
 		lines[i] = line
 	}

@@ -48,7 +48,7 @@ func Test_loadCachedStates(t *testing.T) {
 							CreatedOn:             &ti,
 							ModifiedOn:            &ti,
 						},
-						IPSet: make(map[string]struct{}),
+						IPSet: make(map[string]IPSetItem),
 					},
 					CountrySet:          make(map[string]struct{}),
 					AutonomousSystemSet: make(map[string]struct{}),
