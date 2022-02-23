@@ -168,8 +168,9 @@ var dummyCFAccount AccountConfig = AccountConfig{
 			Actions: []string{"block"},
 		},
 	},
-	IPListPrefix:  "crowdsec",
-	DefaultAction: "block",
+	IPListPrefix:        "crowdsec",
+	DefaultAction:       "block",
+	TotalIPListCapacity: &TotalIPListCapacity,
 }
 
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{

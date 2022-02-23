@@ -28,7 +28,8 @@ func TestNewConfig(t *testing.T) {
 				CloudflareConfig: CloudflareConfig{
 					Accounts: []AccountConfig{
 						{
-							ID: "${CF_ACC_ID}",
+							ID:                  "${CF_ACC_ID}",
+							TotalIPListCapacity: &TotalIPListCapacity,
 							ZoneConfigs: []ZoneConfig{
 								{
 									ID:      "${CF_ZONE_ID}",
