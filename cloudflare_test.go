@@ -1080,6 +1080,22 @@ func Test_keepLatestNIPSetItems(t *testing.T) {
 	}
 }
 
+func Test_keepLatestNIPSetItemsBackwardCompat(t *testing.T) {
+
+	arg := map[string]IPSetItem{
+		"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+		"1.2.3.4": {CreatedAt: timeForMonth(time.May)},
+		"1.2.3.6": {CreatedAt: timeForMonth(time.May)},
+	}
+
+	for n := 1; n <= len(arg); n++ {
+		res, _ := keepLatestNIPSetItems(arg, n)
+		if len(res) != n {
+			t.Errorf("expected len(res)=%d, Got=%d", n, len(res))
+		}
+	}
+}
+
 func IPSetsAreEqual(a map[string]IPSetItem, b map[string]IPSetItem) bool {
 	aOnly, bOnly := calculateIPSetDiff(a, b)
 	return aOnly == 0 && bOnly == 0

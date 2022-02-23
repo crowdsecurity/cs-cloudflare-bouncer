@@ -813,11 +813,16 @@ func keepLatestNIPSetItems(set map[string]IPSetItem, n int) (map[string]IPSetIte
 		return itemsCreationTime[i].After(itemsCreationTime[j])
 	})
 	dropCount := 0
+	tc := 0
 	for ip, item := range set {
 		if item.CreatedAt.After(itemsCreationTime[n-1]) || item.CreatedAt.Equal(itemsCreationTime[n-1]) {
 			newSet[ip] = item
+			tc++
 		} else {
 			dropCount++
+		}
+		if tc == n {
+			break
 		}
 	}
 
