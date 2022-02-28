@@ -25,6 +25,8 @@ import (
 
 const CallsPerSecondLimit uint32 = 4
 
+var TotalIPListCapacity int = 10000
+
 var CloudflareActionByDecisionType = map[string]string{
 	"captcha":      "challenge",
 	"ban":          "block",
@@ -49,9 +51,13 @@ type ZoneLock struct {
 	ZoneID string
 }
 
+type IPSetItem struct {
+	CreatedAt time.Time
+}
+
 type IPListState struct {
 	IPList *cloudflare.IPList
-	IPSet  map[string]struct{}
+	IPSet  map[string]IPSetItem
 }
 
 // one firewall rule per state.
@@ -90,7 +96,7 @@ func allZonesHaveAction(zones []ZoneConfig, action string) bool {
 	return allSupport
 }
 
-func calculateSetDiff(setA map[string]struct{}, setB map[string]struct{}) (int, int) {
+func calculateIPSetDiff(setA map[string]IPSetItem, setB map[string]IPSetItem) (int, int) {
 	exclusiveToA := 0
 	exclusiveToB := 0
 	for item := range setA {
@@ -400,7 +406,7 @@ func (worker *CloudflareWorker) setUpIPList() error {
 			return err
 		}
 		*worker.CFStateByAction[action].IPListState.IPList = tmp
-		worker.CFStateByAction[action].IPListState.IPSet = make(map[string]struct{})
+		worker.CFStateByAction[action].IPListState.IPSet = make(map[string]IPSetItem)
 		worker.CFStateByAction[action].UpdateExpr()
 
 	}
@@ -430,7 +436,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 	// IP decisions are applied at account level
 	newDecisonsByAction := dedupAndClassifyDecisionsByAction(worker.NewIPDecisions)
 	expiredDecisonsByAction := dedupAndClassifyDecisionsByAction(worker.ExpiredIPDecisions)
-	newIPSetByAction := make(map[string]map[string]struct{})
+	newIPSetByAction := make(map[string]map[string]IPSetItem)
 
 	for action, decisions := range newDecisonsByAction {
 		// In case some zones support this action and others don't,  we put this in account's default action.
@@ -442,18 +448,21 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			action = worker.Account.DefaultAction
 			worker.Logger.Debugf("ip action defaulted to %s", action)
 		}
-		for ip := range worker.CFStateByAction[action].IPListState.IPSet {
+		for ip, item := range worker.CFStateByAction[action].IPListState.IPSet {
 			if _, ok := newIPSetByAction[action]; !ok {
-				newIPSetByAction[action] = make(map[string]struct{})
+				newIPSetByAction[action] = make(map[string]IPSetItem)
 			}
-			newIPSetByAction[action][ip] = struct{}{}
+			newIPSetByAction[action][ip] = item
 		}
+
 		for _, decision := range decisions {
 			if _, ok := newIPSetByAction[action]; !ok {
-				newIPSetByAction[action] = make(map[string]struct{})
+				newIPSetByAction[action] = make(map[string]IPSetItem)
 			}
 			if _, ok := newIPSetByAction[action][*decision.Value]; !ok {
-				newIPSetByAction[action][*decision.Value] = struct{}{}
+				newIPSetByAction[action][*decision.Value] = IPSetItem{
+					CreatedAt: time.Now(),
+				}
 			}
 		}
 	}
@@ -469,15 +478,23 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			worker.Logger.Debugf("ip action defaulted to %s", action)
 		}
 		if _, ok := newIPSetByAction[action]; !ok {
-			newIPSetByAction[action] = make(map[string]struct{})
-			for ip := range worker.CFStateByAction[action].IPListState.IPSet {
-				newIPSetByAction[action][ip] = struct{}{}
+			newIPSetByAction[action] = make(map[string]IPSetItem)
+			for ip, item := range worker.CFStateByAction[action].IPListState.IPSet {
+				newIPSetByAction[action][ip] = item
 			}
 		}
 		for _, decision := range decisions {
 			if _, ok := worker.CFStateByAction[action].IPListState.IPSet[*decision.Value]; ok {
 				delete(newIPSetByAction[action], *decision.Value)
 			}
+		}
+	}
+
+	for action := range worker.CFStateByAction {
+		var dropCount int
+		newIPSetByAction[action], dropCount = keepLatestNIPSetItems(newIPSetByAction[action], *worker.Account.TotalIPListCapacity)
+		if dropCount > 0 {
+			worker.Logger.Warnf("%d IPs would be dropped to avoid exceeding IP list limit", dropCount)
 		}
 	}
 
@@ -492,7 +509,9 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			// in the set and continue as usual, and end up with 1 item in the IP list. Then the
 			// defer call takes care of cleaning up the extra IP.
 			worker.Logger.Warningf("emptying IP list for %s action", action)
-			set["10.0.0.1"] = struct{}{}
+			set["10.0.0.1"] = IPSetItem{
+				CreatedAt: time.Now(),
+			}
 			defer func(action string) {
 				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
 				items, err := worker.getAPI().ListIPListItems(worker.Ctx, ipListId)
@@ -510,7 +529,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 				if err != nil {
 					worker.Logger.Error(err)
 				}
-				worker.CFStateByAction[action].IPListState.IPSet = make(map[string]struct{})
+				worker.CFStateByAction[action].IPListState.IPSet = make(map[string]IPSetItem)
 				worker.CFStateByAction[action].IPListState.IPList.NumItems = 0
 				worker.UpdatedState <- worker.CFStateByAction
 				worker.Logger.Infof("emptied IP list for %s action", action)
@@ -544,7 +563,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			}
 			time.Sleep(time.Second)
 		}
-		newItemCount, deletedItemCount := calculateSetDiff(set, worker.CFStateByAction[action].IPListState.IPSet)
+		newItemCount, deletedItemCount := calculateIPSetDiff(set, worker.CFStateByAction[action].IPListState.IPSet)
 		log.Infof("added %d new IPs and deleted %d IPs", newItemCount, deletedItemCount)
 		worker.CFStateByAction[action].IPListState.IPSet = set
 		worker.CFStateByAction[action].IPListState.IPList.NumItems = len(set)
@@ -679,7 +698,7 @@ func (worker *CloudflareWorker) Init() error {
 				worker.CFStateByAction[action] = &CloudflareState{
 					AccountID:   worker.Account.ID,
 					Action:      action,
-					IPListState: IPListState{IPList: &cloudflare.IPList{Name: listName}, IPSet: make(map[string]struct{})},
+					IPListState: IPListState{IPList: &cloudflare.IPList{Name: listName}, IPSet: make(map[string]IPSetItem)},
 				}
 				worker.CFStateByAction[action].FilterIDByZoneID = make(map[string]string)
 				worker.CFStateByAction[action].CountrySet = make(map[string]struct{})
@@ -774,6 +793,40 @@ func (worker *CloudflareWorker) DeleteASBans() error {
 	}
 	worker.ExpiredASDecisions = make([]*models.Decision, 0)
 	return nil
+}
+
+func keepLatestNIPSetItems(set map[string]IPSetItem, n int) (map[string]IPSetItem, int) {
+	currentItems := len(set)
+	if currentItems <= n {
+		return set, 0
+	}
+	newSet := make(map[string]IPSetItem)
+	itemsCreationTime := make([]time.Time, len(set))
+	i := 0
+	for _, val := range set {
+		itemsCreationTime[i] = val.CreatedAt
+		i++
+	}
+	// We use this to find the cutoff duration. This can be improved using more
+	// sophisticated algo  at cost of more code.
+	sort.Slice(itemsCreationTime, func(i, j int) bool {
+		return itemsCreationTime[i].After(itemsCreationTime[j])
+	})
+	dropCount := 0
+	tc := 0
+	for ip, item := range set {
+		if item.CreatedAt.After(itemsCreationTime[n-1]) || item.CreatedAt.Equal(itemsCreationTime[n-1]) {
+			newSet[ip] = item
+			tc++
+		} else {
+			dropCount++
+		}
+		if tc == n {
+			break
+		}
+	}
+
+	return newSet, dropCount
 }
 
 func (worker *CloudflareWorker) normalizeActionForZone(action string, zoneCfg ZoneConfig) string {

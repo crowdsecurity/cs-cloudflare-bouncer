@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -167,8 +168,9 @@ var dummyCFAccount AccountConfig = AccountConfig{
 			Actions: []string{"block"},
 		},
 	},
-	IPListPrefix:  "crowdsec",
-	DefaultAction: "block",
+	IPListPrefix:        "crowdsec",
+	DefaultAction:       "block",
+	TotalIPListCapacity: &TotalIPListCapacity,
 }
 
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
@@ -869,7 +871,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 		"block": {
 			AccountID: dummyCFAccount.ID,
 			IPListState: IPListState{
-				IPSet:  make(map[string]struct{}),
+				IPSet:  make(map[string]IPSetItem),
 				IPList: &cloudflare.IPList{},
 			},
 		},
@@ -884,7 +886,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string]struct{}
+		want   map[string]IPSetItem
 	}{
 		{
 			name: "supported ip decision",
@@ -896,7 +898,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]struct{}{
+			want: map[string]IPSetItem{
 				"1.2.3.4": {},
 			},
 		},
@@ -910,7 +912,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]struct{}{
+			want: map[string]IPSetItem{
 				"1.2.3.4": {},
 			},
 		},
@@ -932,7 +934,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
+			if !IPSetsAreEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
 		})
@@ -950,7 +952,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 		"block": {
 			AccountID: dummyCFAccount.ID,
 			IPListState: IPListState{
-				IPSet: map[string]struct{}{
+				IPSet: map[string]IPSetItem{
 					"1.2.3.4": {},
 					"1.2.3.5": {},
 				},
@@ -968,7 +970,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string]struct{}
+		want   map[string]IPSetItem
 	}{
 		{
 			name: "supported ip decision",
@@ -980,7 +982,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]struct{}{
+			want: map[string]IPSetItem{
 				"1.2.3.5": {},
 			},
 		},
@@ -994,7 +996,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				},
 				API: mockCfAPI,
 			},
-			want: map[string]struct{}{
+			want: map[string]IPSetItem{
 				"1.2.3.5": {},
 			},
 		},
@@ -1016,9 +1018,85 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
+			if !IPSetsAreEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
 		})
 	}
+}
+
+func timeForMonth(month time.Month) time.Time {
+	return time.Date(2000, month, 1, 1, 1, 1, 1, time.UTC)
+}
+
+func Test_keepLatestNIPSetItems(t *testing.T) {
+	type args struct {
+		set map[string]IPSetItem
+		n   int
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string]IPSetItem
+	}{
+		{
+			name: "regular",
+			args: args{
+				set: map[string]IPSetItem{
+					"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+					"1.2.3.4": {CreatedAt: timeForMonth(time.April)},
+					"1.2.3.6": {CreatedAt: timeForMonth(time.March)},
+				},
+				n: 2,
+			},
+			want: map[string]IPSetItem{
+				"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+				"1.2.3.4": {CreatedAt: timeForMonth(time.April)},
+			},
+		},
+		{
+			name: "no items to drop",
+			args: args{
+				set: map[string]IPSetItem{
+					"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+					"1.2.3.4": {CreatedAt: timeForMonth(time.April)},
+					"1.2.3.6": {CreatedAt: timeForMonth(time.March)},
+				},
+				n: 3,
+			},
+			want: map[string]IPSetItem{
+				"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+				"1.2.3.4": {CreatedAt: timeForMonth(time.April)},
+				"1.2.3.6": {CreatedAt: timeForMonth(time.March)},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, _ := keepLatestNIPSetItems(tt.args.set, tt.args.n); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("keepLatestNIPSetItems() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_keepLatestNIPSetItemsBackwardCompat(t *testing.T) {
+
+	arg := map[string]IPSetItem{
+		"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
+		"1.2.3.4": {CreatedAt: timeForMonth(time.May)},
+		"1.2.3.6": {CreatedAt: timeForMonth(time.May)},
+	}
+
+	for n := 1; n <= len(arg); n++ {
+		res, _ := keepLatestNIPSetItems(arg, n)
+		if len(res) != n {
+			t.Errorf("expected len(res)=%d, Got=%d", n, len(res))
+		}
+	}
+}
+
+func IPSetsAreEqual(a map[string]IPSetItem, b map[string]IPSetItem) bool {
+	aOnly, bOnly := calculateIPSetDiff(a, b)
+	return aOnly == 0 && bOnly == 0
 }
