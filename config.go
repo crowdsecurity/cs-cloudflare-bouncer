@@ -261,6 +261,7 @@ func setDefaults(cfg *bouncerConfig) {
 		"CAPI",
 		"cscli",
 		"crowdsec",
+		"lists",
 	}
 
 	cfg.PrometheusConfig = PrometheusConfig{
