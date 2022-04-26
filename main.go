@@ -298,6 +298,8 @@ func main() {
 			Opts: apiclient.DecisionsStreamOpts{
 				Scopes:                 "ip,range,as,country",
 				ScenariosNotContaining: strings.Join(conf.ExcludeScenariosContaining, ","),
+				ScenariosContaining:    strings.Join(conf.IncludeScenariosContaining, ","),
+				Origins:                strings.Join(conf.OnlyIncludeDecisionsFrom, ","),
 			},
 		}
 		if err := csLAPI.Init(); err != nil {
