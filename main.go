@@ -12,12 +12,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/coreos/go-systemd/daemon"
+	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/version"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
@@ -293,7 +295,10 @@ func main() {
 			APIUrl:         conf.CrowdSecLAPIUrl,
 			TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
 			UserAgent:      fmt.Sprintf("%s/%s", name, version.VersionStr()),
-			Scopes:         []string{"ip", "range", "as", "country"},
+			Opts: apiclient.DecisionsStreamOpts{
+				Scopes:                 "ip,range,as,country",
+				ScenariosNotContaining: strings.Join(conf.ExcludeScenariosContaining, ","),
+			},
 		}
 		if err := csLAPI.Init(); err != nil {
 			log.Fatalf(err.Error())

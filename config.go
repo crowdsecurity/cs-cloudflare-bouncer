@@ -41,6 +41,8 @@ type bouncerConfig struct {
 	CrowdSecLAPIUrl             string           `yaml:"crowdsec_lapi_url"`
 	CrowdSecLAPIKey             string           `yaml:"crowdsec_lapi_key"`
 	CrowdsecUpdateFrequencyYAML string           `yaml:"crowdsec_update_frequency"`
+	IncludeScenariosContaining  []string         `yaml:"include_scenarios_containing"`
+	ExcludeScenariosContaining  []string         `yaml:"exclude_scenarios_containing"`
 	CloudflareConfig            CloudflareConfig `yaml:"cloudflare_config"`
 	Daemon                      bool             `yaml:"daemon"`
 	LogMode                     string           `yaml:"log_mode"`
@@ -111,7 +113,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		}
 	}
 	/*Configure logging*/
-	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel); err != nil {
+	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
 		log.Fatal(err.Error())
 	}
 	if config.LogMode == "file" {
@@ -243,6 +245,11 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.LogDir = "/var/log/"
 	cfg.LogLevel = log.InfoLevel
 	cfg.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
+	cfg.ExcludeScenariosContaining = []string{
+		"ssh",
+		"ftp",
+		"smb",
+	}
 
 	cfg.PrometheusConfig = PrometheusConfig{
 		Enabled:       true,
