@@ -41,6 +41,9 @@ type bouncerConfig struct {
 	CrowdSecLAPIUrl             string           `yaml:"crowdsec_lapi_url"`
 	CrowdSecLAPIKey             string           `yaml:"crowdsec_lapi_key"`
 	CrowdsecUpdateFrequencyYAML string           `yaml:"crowdsec_update_frequency"`
+	IncludeScenariosContaining  []string         `yaml:"include_scenarios_containing"`
+	ExcludeScenariosContaining  []string         `yaml:"exclude_scenarios_containing"`
+	OnlyIncludeDecisionsFrom    []string         `yaml:"only_include_decisions_from"`
 	CloudflareConfig            CloudflareConfig `yaml:"cloudflare_config"`
 	Daemon                      bool             `yaml:"daemon"`
 	LogMode                     string           `yaml:"log_mode"`
@@ -111,7 +114,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		}
 	}
 	/*Configure logging*/
-	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel); err != nil {
+	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
 		log.Fatal(err.Error())
 	}
 	if config.LogMode == "file" {
@@ -227,6 +230,12 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			line = fmt.Sprintf("%s #%s", line, account.Name)
 		} else if strings.Contains(line, "total_ip_list_capacity") {
 			line = fmt.Sprintf("%s #%s", line, " only this many latest IP decisions would be kept")
+		} else if strings.Contains(line, "exclude_scenarios_containing") {
+			line = fmt.Sprintf("%s #%s", line, " ignore IPs banned for triggering scenarios containing either of provided word")
+		} else if strings.Contains(line, "include_scenarios_containing") {
+			line = fmt.Sprintf("%s #%s", line, " ignore IPs banned for triggering scenarios not containing either of provided word")
+		} else if strings.Contains(line, "only_include_decisions_from") {
+			line = fmt.Sprintf("%s #%s", line, ` only include IPs banned due to decisions orginating from provided sources. eg value ["cscli", "crowdsec"]`)
 		}
 		lines[i] = line
 	}
@@ -243,6 +252,17 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.LogDir = "/var/log/"
 	cfg.LogLevel = log.InfoLevel
 	cfg.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
+	cfg.ExcludeScenariosContaining = []string{
+		"ssh",
+		"ftp",
+		"smb",
+	}
+	cfg.OnlyIncludeDecisionsFrom = []string{
+		"CAPI",
+		"cscli",
+		"crowdsec",
+		"lists",
+	}
 
 	cfg.PrometheusConfig = PrometheusConfig{
 		Enabled:       true,
