@@ -306,7 +306,10 @@ func main() {
 			log.Fatalf(err.Error())
 		}
 		dispatchTomb.Go(func() error {
-			go csLAPI.Run()
+			go func() {
+				csLAPI.Run()
+				log.Fatal("LAPI can't be reached")
+			}()
 			for {
 				decisions := <-csLAPI.Stream
 				// broadcast decision to each worker
