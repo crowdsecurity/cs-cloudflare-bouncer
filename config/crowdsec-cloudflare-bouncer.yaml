@@ -23,6 +23,10 @@ daemon: true
 log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
+log_max_size: 40
+log_max_age: 30
+log_max_backups: 3
+compress_logs: true
 cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 
 prometheus:
