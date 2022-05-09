@@ -49,13 +49,16 @@ type bouncerConfig struct {
 	LogMode                     string           `yaml:"log_mode"`
 	LogDir                      string           `yaml:"log_dir"`
 	LogLevel                    log.Level        `yaml:"log_level"`
+	LogMaxSize                  int              `yaml:"log_max_size"`
+	LogMaxAge                   int              `yaml:"log_max_age"`
+	LogMaxFiles                 int              `yaml:"log_max_backups"`
+	CompressLogs                *bool            `yaml:"compress_logs"`
 	CachePath                   string           `yaml:"cache_path,omitempty"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
 func NewConfig(configPath string) (*bouncerConfig, error) {
-	var LogOutput *lumberjack.Logger //io.Writer
 	config := &bouncerConfig{}
 	configBuff, err := ioutil.ReadFile(configPath)
 	if err != nil {
@@ -121,14 +124,30 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		if config.LogDir == "" {
 			config.LogDir = "/var/log/"
 		}
-		LogOutput = &lumberjack.Logger{
-			Filename:   config.LogDir + "/crowdsec-cloudflare-bouncer.log",
-			MaxSize:    500, //megabytes
-			MaxBackups: 3,
-			MaxAge:     28,   //days
-			Compress:   true, //disabled by default
+		_maxsize := 40
+		if config.LogMaxSize != 0 {
+			_maxsize = config.LogMaxSize
 		}
-		log.SetOutput(LogOutput)
+		_maxfiles := 3
+		if config.LogMaxFiles != 0 {
+			_maxfiles = config.LogMaxFiles
+		}
+		_maxage := 30
+		if config.LogMaxAge != 0 {
+			_maxage = config.LogMaxAge
+		}
+		_compress := true
+		if config.CompressLogs != nil {
+			_compress = *config.CompressLogs
+		}
+		logOutput := &lumberjack.Logger{
+			Filename:   config.LogDir + "/crowdsec-cloudflare-bouncer.log",
+			MaxSize:    _maxsize,
+			MaxBackups: _maxfiles,
+			MaxAge:     _maxage,
+			Compress:   _compress,
+		}
+		log.SetOutput(logOutput)
 		log.SetFormatter(&log.TextFormatter{TimestampFormat: "02-01-2006 15:04:05", FullTimestamp: true})
 	} else if config.LogMode != "stdout" {
 		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
