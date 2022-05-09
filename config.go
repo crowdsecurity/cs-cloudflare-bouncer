@@ -71,7 +71,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
-	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true}
+	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
 	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge'"
 
 	for i, account := range config.CloudflareConfig.Accounts {
@@ -103,11 +103,19 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			if len(zone.Actions) == 0 {
 				return nil, fmt.Errorf("account %s 's zone %s has no action", account.ID, zone.ID)
 			}
+			defaultActionIsSupported := false
 			for _, a := range zone.Actions {
 				if _, ok := validAction[a]; !ok {
 					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
 				}
+				if a == account.DefaultAction {
+					defaultActionIsSupported = true
+				}
 				config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet[a] = struct{}{}
+			}
+
+			if !defaultActionIsSupported {
+				return nil, fmt.Errorf("zone %s doesn't support the default action %s for it's account", zone.ID, account.DefaultAction)
 			}
 
 			if _, ok := zoneIdSet[zone.ID]; ok {
@@ -196,7 +204,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 				ZoneConfigs:         make([]ZoneConfig, 0),
 				Token:               token,
 				IPListPrefix:        "crowdsec",
-				DefaultAction:       "challenge",
+				DefaultAction:       "managed_challenge",
 				TotalIPListCapacity: &TotalIPListCapacity,
 			})
 
@@ -212,7 +220,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 				if zone.Account.ID == account.ID {
 					accountConfig[i].ZoneConfigs = append(accountConfig[i].ZoneConfigs, ZoneConfig{
 						ID:      zone.ID,
-						Actions: []string{"challenge"},
+						Actions: []string{"managed_challenge"},
 					})
 				}
 			}
@@ -282,6 +290,10 @@ func setDefaults(cfg *bouncerConfig) {
 		"crowdsec",
 		"lists",
 	}
+	cfg.LogMaxAge = 30
+	cfg.LogMaxSize = 40
+	cfg.CompressLogs = types.BoolPtr(true)
+	cfg.LogMaxFiles = 3
 
 	cfg.PrometheusConfig = PrometheusConfig{
 		Enabled:       true,

@@ -33,9 +33,9 @@ func TestNewConfig(t *testing.T) {
 							ZoneConfigs: []ZoneConfig{
 								{
 									ID:      "${CF_ZONE_ID}",
-									Actions: []string{"block"},
+									Actions: []string{"challenge"},
 									ActionSet: map[string]struct{}{
-										"block": {},
+										"challenge": {},
 									},
 								},
 							},

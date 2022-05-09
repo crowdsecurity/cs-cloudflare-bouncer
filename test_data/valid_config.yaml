@@ -12,7 +12,7 @@ cloudflare_config:
     default_action: challenge
     zones:
     - actions: 
-      - block
+      - challenge
       zone_id: ${CF_ZONE_ID} 
 
   update_frequency: 30s
