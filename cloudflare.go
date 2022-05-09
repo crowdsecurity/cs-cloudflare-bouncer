@@ -494,7 +494,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 		var dropCount int
 		newIPSetByAction[action], dropCount = keepLatestNIPSetItems(newIPSetByAction[action], *worker.Account.TotalIPListCapacity)
 		if dropCount > 0 {
-			worker.Logger.Warnf("%d IPs would be dropped to avoid exceeding IP list limit", dropCount)
+			worker.Logger.Warnf("%d IPs won't be inserted/kept to avoid exceeding IP list limit", dropCount)
 		}
 	}
 
