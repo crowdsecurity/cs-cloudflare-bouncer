@@ -57,7 +57,7 @@ type IPSetItem struct {
 
 type IPListState struct {
 	IPList *cloudflare.IPList
-	IPSet  map[string]IPSetItem
+	IPSet  map[string]IPSetItem `json:"-"`
 }
 
 // one firewall rule per state.
