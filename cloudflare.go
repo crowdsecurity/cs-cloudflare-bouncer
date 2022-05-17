@@ -746,7 +746,7 @@ func (worker *CloudflareWorker) insertDecision(decision *models.Decision, decisi
 	if decisionIsExpired {
 		decisionStatus = "expired"
 	}
-	worker.Logger.Infof("found %s decision with value=%s, scope=%s, type=%s", decisionStatus, *decision.Value, *decision.Scope, *decision.Type)
+	worker.Logger.Debugf("found %s decision with value=%s, scope=%s, type=%s", decisionStatus, *decision.Value, *decision.Scope, *decision.Type)
 	*container = append(*container, decision)
 }
 
