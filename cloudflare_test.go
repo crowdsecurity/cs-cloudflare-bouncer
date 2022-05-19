@@ -192,13 +192,11 @@ func TestIPFirewallSetUp(t *testing.T) {
 	worker := CloudflareWorker{
 		API:            mockCfAPI,
 		Account:        dummyCFAccount,
-		Wg:             &wg,
-		UpdatedState:   make(chan map[string]*CloudflareState, 2),
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
 		tokenCallCount: &mockAPICallCounter,
 	}
 	worker.Init()
-	worker.SetUpCloudflareIfNewState()
+	worker.SetUpCloudflareResources()
 	ipLists, err := mockCfAPI.ListIPLists(ctx)
 
 	if err != nil {
@@ -239,8 +237,6 @@ func TestCollectLAPIStream(t *testing.T) {
 	worker := CloudflareWorker{
 		Account:        dummyCFAccount,
 		API:            mockCfAPI,
-		Wg:             &wg,
-		UpdatedState:   make(chan map[string]*CloudflareState, 1),
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
 		tokenCallCount: &mockAPICallCounter,
 	}
@@ -928,7 +924,6 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
 				tokenCallCount:  &mockAPICallCounter,
-				UpdatedState:    make(chan map[string]*CloudflareState, 100),
 			}
 			err := worker.UpdateIPLists()
 			if err != nil {
@@ -1012,7 +1007,6 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:              promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test2%d", i), Help: "no help you're just a test"}),
 				tokenCallCount:     &mockAPICallCounter,
-				UpdatedState:       make(chan map[string]*CloudflareState, 100),
 			}
 			err := worker.UpdateIPLists()
 			if err != nil {

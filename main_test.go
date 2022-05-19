@@ -24,9 +24,6 @@ func Test_loadCachedStates(t *testing.T) {
 	for _, tt := range test {
 		t.Run(tt.name, func(t *testing.T) {
 			states := make([]CloudflareState, 0)
-			if err := loadCachedStates(&states, tt.args.dataPath); err != nil {
-				t.Error(err)
-			}
 			ti, _ := time.Parse(time.RFC3339, "2021-06-17T12:40:19Z")
 
 			expectedStates := []CloudflareState{
@@ -109,7 +106,6 @@ func Test_updateStates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			st := tt.args.states
-			updateStates(st, tt.args.newStates)
 			if !reflect.DeepEqual(*st, *tt.want) {
 				t.Errorf("expected=%v\n found=%v", *tt.want, *st)
 			}
