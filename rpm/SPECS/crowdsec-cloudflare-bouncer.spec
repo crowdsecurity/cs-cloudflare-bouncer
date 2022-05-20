@@ -29,7 +29,7 @@ BuildRequires:  make
 BUILD_VERSION=%{local_version} make
 TMP=`mktemp -p /tmp/`
 cp config/%{name}.service ${TMP}
-BIN=%{_bindir}/%{name} CFG=/etc/crowdsec/ envsubst < ${TMP} > config/%{name}.service
+BIN=%{_bindir}/%{name} CFG=/etc/crowdsec/bouncers/ envsubst < ${TMP} > config/%{name}.service
 rm ${TMP}
 
 %install
