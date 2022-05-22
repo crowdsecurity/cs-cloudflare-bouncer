@@ -17,7 +17,8 @@ BUILD_TAG="$(shell git rev-parse HEAD)"
 export LD_OPTS=-ldflags "-s -w -X github.com/crowdsecurity/cs-cloudflare-bouncer/version.Version=$(BUILD_VERSION) \
 -X github.com/crowdsecurity/cs-cloudflare-bouncer/version.BuildDate=$(BUILD_TIMESTAMP) \
 -X github.com/crowdsecurity/cs-cloudflare-bouncer/version.Tag=$(BUILD_TAG) \
--X github.com/crowdsecurity/cs-cloudflare-bouncer/version.GoVersion=$(BUILD_GOVERSION)"
+-X github.com/crowdsecurity/cs-cloudflare-bouncer/version.GoVersion=$(BUILD_GOVERSION)" \
+-trimpath
 PREFIX?="/"
 PID_DIR = $(PREFIX)"/var/run/"
 BINARY_NAME=crowdsec-cloudflare-bouncer
