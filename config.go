@@ -53,7 +53,6 @@ type bouncerConfig struct {
 	LogMaxAge                   int              `yaml:"log_max_age"`
 	LogMaxFiles                 int              `yaml:"log_max_backups"`
 	CompressLogs                *bool            `yaml:"compress_logs"`
-	CachePath                   string           `yaml:"cache_path,omitempty"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 }
 
@@ -160,11 +159,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	} else if config.LogMode != "stdout" {
 		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
 	}
-
-	if config.CachePath == "" {
-		config.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
-	}
-
 	return config, nil
 }
 
@@ -278,7 +272,6 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.LogMode = "file"
 	cfg.LogDir = "/var/log/"
 	cfg.LogLevel = log.InfoLevel
-	cfg.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
 	cfg.ExcludeScenariosContaining = []string{
 		"ssh",
 		"ftp",

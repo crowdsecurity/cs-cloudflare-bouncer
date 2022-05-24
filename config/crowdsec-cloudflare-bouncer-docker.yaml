@@ -23,7 +23,6 @@ daemon: false
 log_mode: stdout
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
-cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 
 prometheus:
   enabled: true

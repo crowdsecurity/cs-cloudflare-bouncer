@@ -8,7 +8,6 @@ A bouncer that syncs the decisions made by CrowdSec with CloudFlare's firewall. 
 docker run crowdsecurity/cloudflare-bouncer \
  -g <CLOUDFLARE_TOKEN1> <CLOUDFLARE_TOKEN2> > cfg.yaml # auto-generate cloudflare config for provided space separated tokens 
 vi cfg.yaml # review config and set `crowdsec_lapi_key`
-touch cloudflare-cache.json
 ```
 
 The `crowdsec_lapi_key` can be obtained by running the following:
@@ -23,7 +22,6 @@ The `crowdsec_lapi_url` must be accessible from the container.
 ```bash
   docker run \
   -v $PWD/cfg.yaml:/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml \
-  -v $PWD/cloudflare-cache.json:/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json \
   -p 2112:2112 \
   crowdsecurity/cloudflare-bouncer
 ```
@@ -58,7 +56,6 @@ daemon: false
 log_mode: file
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
-cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 
 prometheus:
   enabled: true
@@ -119,20 +116,18 @@ Example Usage:
 ```bash
   docker run \
   -v $PWD/cfg.yaml:/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml \
-  -v $PWD/cloudflare-cache.json:/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json \
   -p 2112:2112 \
   crowdsecurity/cloudflare-bouncer -s
 ```
 
 ### Cloudflare Cleanup
 
-This deletes all IP lists and firewall rules at cloudflare which were created by the bouncer. It also deletes the local cache. 
+This deletes all IP lists and firewall rules at cloudflare which were created by the bouncer.
 
 Example Usage:
 ```bash
   docker run \
   -v $PWD/cfg.yaml:/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml \
-  -v $PWD/cloudflare-cache.json:/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json \
   -p 2112:2112 \
   crowdsecurity/cloudflare-bouncer -s
 ```

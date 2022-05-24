@@ -15,9 +15,6 @@
 crowdsec-cloudflare-bouncer.tgz
 crowdsec-cloudflare-bouncer*/
 
-# ignore cache
-cache.json
-
 # Binaries for programs and plugins
 *.exe
 *.exe~

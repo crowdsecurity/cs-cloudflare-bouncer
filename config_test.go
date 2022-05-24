@@ -50,7 +50,6 @@ func TestNewConfig(t *testing.T) {
 				LogMode:   "stdout",
 				LogDir:    "/var/log/",
 				LogLevel:  log.InfoLevel,
-				CachePath: "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json",
 			},
 			wantErr: false,
 		},
