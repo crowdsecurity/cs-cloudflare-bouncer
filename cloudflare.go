@@ -150,6 +150,7 @@ type CloudflareWorker struct {
 	Account                 AccountConfig
 	ZoneLocks               []ZoneLock
 	Zones                   []cloudflare.Zone
+	FirewallRulesByZoneID   map[string]*[]cloudflare.FirewallRule
 	CFStateByAction         map[string]*CloudflareState
 	Ctx                     context.Context
 	LAPIStream              chan *models.DecisionsStreamResponse
@@ -281,6 +282,7 @@ func (worker *CloudflareWorker) deleteRulesContainingStringFromZoneIDs(str strin
 				deleteRules = append(deleteRules, rule.ID)
 			}
 		}
+
 		if len(deleteRules) > 0 {
 			err = worker.getAPI().DeleteFirewallRules(worker.Ctx, zoneID, deleteRules)
 			if err != nil {
@@ -289,6 +291,71 @@ func (worker *CloudflareWorker) deleteRulesContainingStringFromZoneIDs(str strin
 			zoneLogger.Infof("deleted %d firewall rules containing the string %s", len(deleteRules), str)
 		}
 
+	}
+	return nil
+}
+
+func getIPListNameWithPrefixForAction(prefix string, action string) string {
+	return fmt.Sprintf("%s_%s", prefix, action)
+}
+
+func (worker *CloudflareWorker) importExistingIPLists() error {
+	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx)
+	if err != nil {
+		return err
+	}
+	for action := range worker.CFStateByAction {
+		for _, IPList := range IPLists {
+			if IPList.Name != getIPListNameWithPrefixForAction(worker.Account.IPListPrefix, action) {
+				continue
+			}
+			worker.Logger.Infof("using existing  ip list %s", IPList.Name)
+			worker.CFStateByAction[action].IPListState.IPList = &IPList
+			if items, err := worker.getAPI().ListIPListItems(worker.Ctx, IPList.ID); err == nil {
+				for _, item := range items {
+					worker.CFStateByAction[action].IPListState.IPSet[item.IP] = IPSetItem{
+						CreatedAt: *item.CreatedOn,
+					}
+				}
+			}
+			// TODO we can also import existing content here, to exclude user's custom banned IPs.
+		}
+	}
+	return nil
+}
+
+func (worker *CloudflareWorker) importRulesAndFiltersForExistingIPList(IPListName string) error {
+	for _, zone := range worker.Account.ZoneConfigs {
+		rules, err := worker.cachedFirewallRules(zone.ID)
+		if err != nil {
+			return err
+		}
+		for action, state := range worker.CFStateByAction {
+			for _, rule := range rules {
+				if state == nil || state.IPListState.IPList == nil || state.IPListState.IPList.Name == "" {
+					continue
+				}
+				if strings.Contains(rule.Description, fmt.Sprintf("CrowdSec %s rule", action)) &&
+					strings.Contains(rule.Filter.Expression, state.IPListState.IPList.Name) {
+					worker.Logger.WithField("zone_id", zone.ID).Infof("found existing rule for %s action", action)
+					worker.CFStateByAction[action].FilterIDByZoneID[zone.ID] = rule.Filter.ID
+					worker.CFStateByAction[action].CurrExpr = rule.Filter.Expression
+				}
+			}
+		}
+
+	}
+	return nil
+}
+
+func (worker *CloudflareWorker) importExistingInfra() error {
+	if err := worker.importExistingIPLists(); err != nil {
+		return err
+	}
+	for _, state := range worker.CFStateByAction {
+		if state.IPListState.IPList != nil {
+			worker.importRulesAndFiltersForExistingIPList(state.IPListState.IPList.Name)
+		}
 	}
 	return nil
 }
@@ -350,8 +417,8 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 	return nil
 }
 
-// cache ListZones
-func (worker *CloudflareWorker) ListZones() ([]cloudflare.Zone, error) {
+// cached cachedListZones
+func (worker *CloudflareWorker) cachedListZones() ([]cloudflare.Zone, error) {
 	if len(worker.Zones) != 0 {
 		return worker.Zones, nil
 	}
@@ -359,13 +426,26 @@ func (worker *CloudflareWorker) ListZones() ([]cloudflare.Zone, error) {
 	if err != nil {
 		return nil, err
 	}
+	worker.Zones = zones
 	return zones, nil
+}
+
+func (worker *CloudflareWorker) cachedFirewallRules(zoneID string) ([]cloudflare.FirewallRule, error) {
+	if worker.FirewallRulesByZoneID[zoneID] != nil {
+		return *worker.FirewallRulesByZoneID[zoneID], nil
+	}
+	rules, err := worker.getAPI().FirewallRules(worker.Ctx, zoneID, cloudflare.PaginationOptions{})
+	if err != nil {
+		return nil, err
+	}
+	worker.FirewallRulesByZoneID[zoneID] = &rules
+	return rules, err
 }
 
 func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) error {
 	worker.Logger.Info("removing ip list dependencies")
 	worker.Logger.Info("listing zones")
-	zones, err := worker.ListZones()
+	zones, err := worker.cachedListZones()
 	if err != nil {
 		return err
 	}
@@ -400,35 +480,35 @@ func (worker *CloudflareWorker) getIPListID(IPListName string, IPLists []cloudfl
 	return nil
 }
 
-func (worker *CloudflareWorker) setUpIPList() error {
+func (worker *CloudflareWorker) createMissingIPLists() error {
 	// if IP list already exists don't create one
-
-	err := worker.deleteExistingIPList()
-	if err != nil {
-		return err
-	}
-
 	for action := range worker.CFStateByAction {
-		ipList, err := worker.getAPI().CreateIPList(
-			worker.Ctx,
-			fmt.Sprintf("%s_%s", worker.Account.IPListPrefix, action),
-			fmt.Sprintf("%s IP list by crowdsec", action),
-			"ip",
-		)
-		if err != nil {
-			return err
+		if worker.CFStateByAction[action].IPListState.IPList == nil {
+			ipList, err := worker.getAPI().CreateIPList(
+				worker.Ctx,
+				fmt.Sprintf("%s_%s", worker.Account.IPListPrefix, action),
+				fmt.Sprintf("%s IP list by crowdsec", action),
+				"ip",
+			)
+			if err != nil {
+				return err
+			}
+			worker.CFStateByAction[action].IPListState.IPList = &ipList
 		}
-		worker.CFStateByAction[action].IPListState.IPList = &ipList
 		worker.CFStateByAction[action].IPListState.IPSet = make(map[string]IPSetItem)
 		worker.CFStateByAction[action].UpdateExpr()
 	}
 	return nil
 }
 
-func (worker *CloudflareWorker) setUpRules() error {
+func (worker *CloudflareWorker) createMissingRules() error {
 	for _, zone := range worker.Account.ZoneConfigs {
 		zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zone.ID})
 		for _, action := range zone.Actions {
+			if worker.CFStateByAction[action].FilterIDByZoneID[zone.ID] != "" {
+				zoneLogger.Info("skipping rule creation for " + action)
+				continue
+			}
 			ruleExpression := worker.CFStateByAction[action].CurrExpr
 			firewallRules := []cloudflare.FirewallRule{{Filter: cloudflare.Filter{Expression: ruleExpression}, Action: action, Description: fmt.Sprintf("CrowdSec %s rule", action)}}
 			rule, err := worker.getAPI().CreateFirewallRules(worker.Ctx, zone.ID, firewallRules)
@@ -437,8 +517,8 @@ func (worker *CloudflareWorker) setUpRules() error {
 				return err
 			}
 			worker.CFStateByAction[action].FilterIDByZoneID[zone.ID] = rule[0].Filter.ID
+			zoneLogger.Infof("created firewall rule for %s action", action)
 		}
-		zoneLogger.Info("firewall rules created")
 	}
 	worker.Logger.Info("setup of firewall rules complete")
 	return nil
@@ -518,7 +598,7 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 		if len(set) == 0 {
 			// The ReplaceIPListItemsAsync method doesn't allow to empty the list.
 			// Hence we only add one mock IP and later delete it. To do this we add the mock IP
-			// in the set and continue as usual, and end up with 1 item in the IP list. Then the
+			// in the set and continue as usual, and end up with 1 item in the IP list. Then the``
 			// defer call takes care of cleaning up the extra IP.
 			worker.Logger.Warningf("emptying IP list for %s action", action)
 			set["10.0.0.1"] = IPSetItem{
@@ -586,13 +666,17 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 }
 
 func (worker *CloudflareWorker) SetUpCloudflareResources() error {
-	err := worker.setUpIPList()
+	if err := worker.importExistingInfra(); err != nil {
+		return err
+	}
+
+	err := worker.createMissingIPLists()
 	if err != nil {
 		worker.Logger.Errorf("error %s in creating IP List", err.Error())
 		return err
 	}
 	worker.Logger.Debug("ip list setup complete")
-	err = worker.setUpRules()
+	err = worker.createMissingRules()
 	if err != nil {
 		worker.Logger.Error(err.Error())
 		return err
@@ -649,7 +733,8 @@ func (worker *CloudflareWorker) Init() error {
 	worker.NewIPDecisions = make([]*models.Decision, 0)
 	worker.ExpiredIPDecisions = make([]*models.Decision, 0)
 	worker.CFStateByAction = make(map[string]*CloudflareState)
-	zones, err := worker.ListZones()
+	worker.FirewallRulesByZoneID = make(map[string]*[]cloudflare.FirewallRule)
+	zones, err := worker.cachedListZones()
 	if err != nil {
 		worker.Logger.Error(err.Error())
 		return err
