@@ -313,8 +313,10 @@ func (worker *CloudflareWorker) importExistingIPLists() error {
 			worker.CFStateByAction[action].IPListState.IPList = &IPList
 			if items, err := worker.getAPI().ListIPListItems(worker.Ctx, IPList.ID); err == nil {
 				for _, item := range items {
-					worker.CFStateByAction[action].IPListState.IPSet[item.IP] = IPSetItem{
-						CreatedAt: *item.CreatedOn,
+					if item.CreatedOn != nil {
+						worker.CFStateByAction[action].IPListState.IPSet[item.IP] = IPSetItem{
+							CreatedAt: *item.CreatedOn,
+						}
 					}
 				}
 			}

@@ -174,7 +174,10 @@ var dummyCFAccount AccountConfig = AccountConfig{
 }
 
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
-	IPLists: []cloudflare.IPList{{ID: "11", Name: "crowdsec_block", Description: "already"}, {ID: "12", Name: "crowd"}},
+	IPLists: []cloudflare.IPList{{
+		ID: "11", Name: "crowdsec_block", Description: "already", CreatedOn: &time.Time{}},
+		{ID: "12", Name: "crowd", CreatedOn: &time.Time{}},
+	},
 	FirewallRulesList: []cloudflare.FirewallRule{
 		{Filter: cloudflare.Filter{Expression: "ip in $crowdsec_block"}},
 		{Filter: cloudflare.Filter{Expression: "ip in $dummy"}}},
@@ -214,8 +217,8 @@ func TestIPFirewallSetUp(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(fr) != 2 {
-		t.Errorf("expected only 2 firewall rule  found %d", len(fr))
+	if len(fr) != 3 {
+		t.Errorf("expected only 3 firewall rule  found %d", len(fr))
 	}
 }
 
@@ -241,7 +244,7 @@ func TestCollectLAPIStream(t *testing.T) {
 		tokenCallCount: &mockAPICallCounter,
 	}
 	worker.Init()
-	worker.setUpIPList()
+	worker.createMissingIPLists()
 
 	worker.CollectLAPIStream(dummyResponse)
 	if len(worker.NewIPDecisions) != 1 {
