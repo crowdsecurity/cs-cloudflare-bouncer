@@ -5,14 +5,14 @@ CONFIG_DIR="/etc/crowdsec/bouncers/"
 PID_DIR="/var/run/crowdsec/"
 SYSTEMD_PATH_FILE="/etc/systemd/system/crowdsec-cloudflare-bouncer.service"
 
-LAPI_KEY=""
+API_KEY=""
 
 gen_apikey() {
     which cscli > /dev/null
     if [[ $? == 0 ]]; then 
         echo "cscli found, generating bouncer api key."
         SUFFIX=`tr -dc A-Za-z0-9 </dev/urandom | head -c 8`
-        LAPI_KEY=`cscli bouncers add crowdsec-cloudflare-bouncer-${SUFFIX} -o raw`
+        API_KEY=`cscli bouncers add crowdsec-cloudflare-bouncer-${SUFFIX} -o raw`
         READY="yes"
     else 
         echo "cscli not found, you will need to generate api key."
@@ -21,7 +21,7 @@ gen_apikey() {
 }
 
 gen_config_file() {
-    LAPI_KEY=${LAPI_KEY} envsubst < ./config/crowdsec-cloudflare-bouncer.yaml > "${CONFIG_DIR}crowdsec-cloudflare-bouncer.yaml"
+    API_KEY=${API_KEY} envsubst < ./config/crowdsec-cloudflare-bouncer.yaml > "${CONFIG_DIR}crowdsec-cloudflare-bouncer.yaml"
 }
 
 

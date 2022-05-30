@@ -23,7 +23,7 @@ func TestNewConfig(t *testing.T) {
 			args: args{"./test_data/valid_config.yaml"},
 			want: &bouncerConfig{
 				CrowdSecLAPIUrl:             "http://localhost:8080/",
-				CrowdSecLAPIKey:             "${LAPI_KEY}",
+				CrowdSecLAPIKey:             "${API_KEY}",
 				CrowdsecUpdateFrequencyYAML: "10s",
 				CloudflareConfig: CloudflareConfig{
 					Accounts: []AccountConfig{
@@ -46,10 +46,10 @@ func TestNewConfig(t *testing.T) {
 					},
 					UpdateFrequency: time.Second * 30,
 				},
-				Daemon:    false,
-				LogMode:   "stdout",
-				LogDir:    "/var/log/",
-				LogLevel:  log.InfoLevel,
+				Daemon:   false,
+				LogMode:  "stdout",
+				LogDir:   "/var/log/",
+				LogLevel: log.InfoLevel,
 			},
 			wantErr: false,
 		},

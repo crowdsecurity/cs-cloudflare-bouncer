@@ -189,7 +189,6 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 			return "", err
 		}
 		accounts, _, err := api.Accounts(ctx, cloudflare.AccountsListParams{})
-		fmt.Printf("%+v", accounts)
 		if err != nil {
 			return "", err
 		}

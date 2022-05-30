@@ -34,7 +34,7 @@ Configuration file must be at `/etc/crowdsec/bouncers/crowdsec-cloudflare-bounce
 ```yaml
 # CrowdSec Config
 crowdsec_lapi_url: http://localhost:8080/
-crowdsec_lapi_key: ${LAPI_KEY}
+crowdsec_lapi_key: ${API_KEY}
 crowdsec_update_frequency: 10s
 
 #Cloudflare Config. 
