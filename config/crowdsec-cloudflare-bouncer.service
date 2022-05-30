@@ -3,7 +3,7 @@ Description=CrowdSec bouncer for cloudflare
 After=syslog.target crowdsec.service
 
 [Service]
-Type=notify
+Type=simple
 ExecStart=${BIN} -c ${CFG}/crowdsec-cloudflare-bouncer.yaml
 
 [Install]
