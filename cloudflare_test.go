@@ -35,13 +35,13 @@ func (cfAPI *mockCloudflareAPI) ListZones(ctx context.Context, z ...string) ([]c
 	return cfAPI.ZoneList, nil
 }
 
-func (cfAPI *mockCloudflareAPI) CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error) {
+func (cfAPI *mockCloudflareAPI) CreateIPList(ctx context.Context, accountID string, name string, desc string, typ string) (cloudflare.IPList, error) {
 	ipList := cloudflare.IPList{ID: strconv.Itoa(len(cfAPI.IPLists))}
 	cfAPI.IPLists = append(cfAPI.IPLists, ipList)
 	return ipList, nil
 }
 
-func (cfAPI *mockCloudflareAPI) DeleteIPList(ctx context.Context, id string) (cloudflare.IPListDeleteResponse, error) {
+func (cfAPI *mockCloudflareAPI) DeleteIPList(ctx context.Context, accountID string, id string) (cloudflare.IPListDeleteResponse, error) {
 	for i, j := range cfAPI.IPLists {
 		if j.ID == id {
 			cfAPI.IPLists = append(cfAPI.IPLists[:i], cfAPI.IPLists[i+1:]...)
@@ -51,7 +51,7 @@ func (cfAPI *mockCloudflareAPI) DeleteIPList(ctx context.Context, id string) (cl
 	return cloudflare.IPListDeleteResponse{}, nil
 }
 
-func (cfAPI *mockCloudflareAPI) ListIPLists(ctx context.Context) ([]cloudflare.IPList, error) {
+func (cfAPI *mockCloudflareAPI) ListIPLists(ctx context.Context, accountID string) ([]cloudflare.IPList, error) {
 	return cfAPI.IPLists, nil
 }
 
@@ -95,7 +95,7 @@ func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string
 	return nil
 }
 
-func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
+func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, accountID string, id string, items cloudflare.IPListItemDeleteRequest) ([]cloudflare.IPListItem, error) {
 	for j := range cfAPI.IPLists {
 		if cfAPI.IPLists[j].ID == id {
 			cfAPI.IPLists[j].NumItems -= len(items.Items)
@@ -120,7 +120,7 @@ func (cfAPI *mockCloudflareAPI) DeleteIPListItems(ctx context.Context, id string
 	return cfAPI.IPListItems[id], nil
 }
 
-func (cfAPI *mockCloudflareAPI) ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error) {
+func (cfAPI *mockCloudflareAPI) ListIPListItems(ctx context.Context, accountID string, id string) ([]cloudflare.IPListItem, error) {
 	return []cloudflare.IPListItem{
 		{ID: "1234"},
 	}, nil
@@ -141,11 +141,11 @@ func (cfAPI *mockCloudflareAPI) FirewallRules(ctx context.Context, zone string, 
 	return cfAPI.FirewallRulesList, nil
 }
 
-func (cfAPI *mockCloudflareAPI) GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error) {
+func (cfAPI *mockCloudflareAPI) GetIPListBulkOperation(ctx context.Context, accountID string, id string) (cloudflare.IPListBulkOperation, error) {
 	return cloudflare.IPListBulkOperation{Status: "completed"}, nil
 }
 
-func (cfAPI *mockCloudflareAPI) ReplaceIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error) {
+func (cfAPI *mockCloudflareAPI) ReplaceIPListItemsAsync(ctx context.Context, accountID string, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error) {
 	IPItems := make([]cloudflare.IPListItem, len(items))
 	for j := range cfAPI.IPLists {
 		if cfAPI.IPLists[j].ID == id {
@@ -200,7 +200,7 @@ func TestIPFirewallSetUp(t *testing.T) {
 	}
 	worker.Init()
 	worker.SetUpCloudflareResources()
-	ipLists, err := mockCfAPI.ListIPLists(ctx)
+	ipLists, err := mockCfAPI.ListIPLists(ctx, "")
 
 	if err != nil {
 		t.Error(err)

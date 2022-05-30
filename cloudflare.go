@@ -170,18 +170,18 @@ type CloudflareWorker struct {
 type cloudflareAPI interface {
 	Filters(ctx context.Context, zoneID string, pageOpts cloudflare.PaginationOptions) ([]cloudflare.Filter, error)
 	ListZones(ctx context.Context, z ...string) ([]cloudflare.Zone, error)
-	CreateIPList(ctx context.Context, name string, desc string, typ string) (cloudflare.IPList, error)
-	DeleteIPList(ctx context.Context, id string) (cloudflare.IPListDeleteResponse, error)
-	ListIPLists(ctx context.Context) ([]cloudflare.IPList, error)
+	CreateIPList(ctx context.Context, accountID string, name string, desc string, typ string) (cloudflare.IPList, error)
+	DeleteIPList(ctx context.Context, accountID string, id string) (cloudflare.IPListDeleteResponse, error)
+	ListIPLists(ctx context.Context, accountID string) ([]cloudflare.IPList, error)
 	CreateFirewallRules(ctx context.Context, zone string, rules []cloudflare.FirewallRule) ([]cloudflare.FirewallRule, error)
 	DeleteFirewallRules(ctx context.Context, zoneID string, firewallRuleIDs []string) error
 	FirewallRules(ctx context.Context, zone string, opts cloudflare.PaginationOptions) ([]cloudflare.FirewallRule, error)
 	DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error
 	UpdateFilters(ctx context.Context, zoneID string, filters []cloudflare.Filter) ([]cloudflare.Filter, error)
-	ReplaceIPListItemsAsync(ctx context.Context, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error)
-	GetIPListBulkOperation(ctx context.Context, id string) (cloudflare.IPListBulkOperation, error)
-	ListIPListItems(ctx context.Context, id string) ([]cloudflare.IPListItem, error)
-	DeleteIPListItems(ctx context.Context, id string, items cloudflare.IPListItemDeleteRequest) (
+	ReplaceIPListItemsAsync(ctx context.Context, accountID string, id string, items []cloudflare.IPListItemCreateRequest) (cloudflare.IPListItemCreateResponse, error)
+	GetIPListBulkOperation(ctx context.Context, accountID string, id string) (cloudflare.IPListBulkOperation, error)
+	ListIPListItems(ctx context.Context, accountID string, id string) ([]cloudflare.IPListItem, error)
+	DeleteIPListItems(ctx context.Context, accountID string, id string, items cloudflare.IPListItemDeleteRequest) (
 		[]cloudflare.IPListItem, error)
 }
 
@@ -300,25 +300,16 @@ func getIPListNameWithPrefixForAction(prefix string, action string) string {
 }
 
 func (worker *CloudflareWorker) importExistingIPLists() error {
-	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx)
+	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx, worker.Account.ID)
 	if err != nil {
 		return err
 	}
 	for action := range worker.CFStateByAction {
 		for _, IPList := range IPLists {
-			if IPList.Name != getIPListNameWithPrefixForAction(worker.Account.IPListPrefix, action) {
-				continue
-			}
-			worker.Logger.Infof("using existing  ip list %s", IPList.Name)
-			worker.CFStateByAction[action].IPListState.IPList = &IPList
-			if items, err := worker.getAPI().ListIPListItems(worker.Ctx, IPList.ID); err == nil {
-				for _, item := range items {
-					if item.CreatedOn != nil {
-						worker.CFStateByAction[action].IPListState.IPSet[item.IP] = IPSetItem{
-							CreatedAt: *item.CreatedOn,
-						}
-					}
-				}
+			if IPList.Name == getIPListNameWithPrefixForAction(worker.Account.IPListPrefix, action) {
+				worker.Logger.Infof("using existing  ip list %s %s", IPList.Name, IPList.ID)
+				worker.CFStateByAction[action].IPListState.IPList = &IPList
+				break
 			}
 			// TODO we can also import existing content here, to exclude user's custom banned IPs.
 		}
@@ -396,7 +387,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingStringFromZoneIDs(str str
 
 func (worker *CloudflareWorker) deleteExistingIPList() error {
 	worker.Logger.Info("Getting all IP lists")
-	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx)
+	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx, worker.Account.ID)
 	if err != nil {
 		return err
 	}
@@ -411,7 +402,7 @@ func (worker *CloudflareWorker) deleteExistingIPList() error {
 		}
 
 		worker.Logger.Infof("deleting ip list %s", IPList.Name)
-		_, err = worker.getAPI().DeleteIPList(worker.Ctx, IPList.ID)
+		_, err = worker.getAPI().DeleteIPList(worker.Ctx, worker.Account.ID, IPList.ID)
 		if err != nil {
 			return err
 		}
@@ -488,6 +479,7 @@ func (worker *CloudflareWorker) createMissingIPLists() error {
 		if worker.CFStateByAction[action].IPListState.IPList == nil {
 			ipList, err := worker.getAPI().CreateIPList(
 				worker.Ctx,
+				worker.Account.ID,
 				fmt.Sprintf("%s_%s", worker.Account.IPListPrefix, action),
 				fmt.Sprintf("%s IP list by crowdsec", action),
 				"ip",
@@ -608,12 +600,12 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 			}
 			defer func(action string) {
 				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
-				items, err := worker.getAPI().ListIPListItems(worker.Ctx, ipListId)
+				items, err := worker.getAPI().ListIPListItems(worker.Ctx, worker.Account.ID, ipListId)
 				if err != nil {
 					worker.Logger.Error(err)
 					return
 				}
-				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, ipListId, cloudflare.IPListItemDeleteRequest{
+				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, worker.Account.ID, ipListId, cloudflare.IPListItemDeleteRequest{
 					Items: []cloudflare.IPListItemDeleteItemRequest{
 						{
 							ID: items[0].ID,
@@ -635,13 +627,13 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 				IP: ip,
 			})
 		}
-		ret, err := worker.getAPI().ReplaceIPListItemsAsync(worker.Ctx, worker.CFStateByAction[action].IPListState.IPList.ID, req)
+		ret, err := worker.getAPI().ReplaceIPListItemsAsync(worker.Ctx, worker.Account.ID, worker.CFStateByAction[action].IPListState.IPList.ID, req)
 		if err != nil {
 			return err
 		}
 	POLL_LOOP:
 		for {
-			res, err := worker.getAPI().GetIPListBulkOperation(worker.Ctx, ret.Result.OperationID)
+			res, err := worker.getAPI().GetIPListBulkOperation(worker.Ctx, worker.Account.ID, ret.Result.OperationID)
 			if err != nil {
 				return err
 			}
