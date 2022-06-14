@@ -71,7 +71,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
-	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge'"
+	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge', 'managed_challenge'"
 
 	for i, account := range config.CloudflareConfig.Accounts {
 		if _, ok := accountIDSet[account.ID]; ok {

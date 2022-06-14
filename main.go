@@ -76,6 +76,7 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Printf("Config successfully generated in %s", *configOutputPath)
 		} else {
 			fmt.Print(cfg)
 		}
