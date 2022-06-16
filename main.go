@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -10,15 +9,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
-	"github.com/coreos/go-systemd/daemon"
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/version"
@@ -33,89 +28,6 @@ const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-b
 const (
 	name = "crowdsec-cloudflare-bouncer"
 )
-
-func HandleSignals() {
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGTERM)
-	exitChan := make(chan int)
-	go func() {
-		for {
-			s := <-signalChan
-			switch s {
-			case syscall.SIGTERM:
-				exitChan <- 0
-			}
-		}
-	}()
-	code := <-exitChan
-	log.Infof("Shutting down cloudflare-bouncer service")
-	os.Exit(code)
-}
-
-func loadCachedStates(states *[]CloudflareState, cachePath string) error {
-	if _, err := os.Stat(cachePath); err != nil {
-		log.Debug("no cache found")
-		return nil
-	}
-	f, err := os.Open(cachePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(data, &states)
-	return err
-}
-
-func dumpStates(states *[]CloudflareState, cachePath string) error {
-	data, err := json.MarshalIndent(states, "", "	")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0750); err != nil {
-		return err
-	}
-	err = os.WriteFile(cachePath, data, 0660)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func deleteCacheIfExists(cachePath string) error {
-	var err error
-	if _, err = os.Stat(cachePath); err == nil {
-		err = os.Remove(cachePath)
-		// cache can't deleted in case it's mounted to docker image.
-		// In such case try to atleast truncate it
-		log.Errorf("unable to delete cache: %v", err)
-		log.Info("attempting to truncate cache")
-		if err != nil {
-			err = os.Truncate(cachePath, 0)
-		}
-	}
-	return err
-}
-
-func updateStates(states *[]CloudflareState, newStates map[string]*CloudflareState) {
-	found := false
-	for i, state := range *states {
-		for _, receivedState := range newStates {
-			if receivedState.AccountID == state.AccountID && receivedState.Action == state.Action {
-				(*states)[i] = *receivedState
-				found = true
-			}
-		}
-	}
-	if !found {
-		for _, receivedState := range newStates {
-			*states = append(*states, *receivedState)
-		}
-	}
-}
 
 func main() {
 
@@ -164,6 +76,7 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Printf("Config successfully generated in %s", *configOutputPath)
 		} else {
 			fmt.Print(cfg)
 		}
@@ -203,40 +116,21 @@ func main() {
 	var workerTomb tomb.Tomb
 	var serverTomb tomb.Tomb
 	var dispatchTomb tomb.Tomb
-	var stateTomb tomb.Tomb
-
-	var wg sync.WaitGroup
 
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
-	stateStream := make(chan map[string]*CloudflareState)
-	workerStates := make([]CloudflareState, 0)
 	APICountByToken := make(map[string]*uint32)
-
-	err = loadCachedStates(&workerStates, conf.CachePath)
-	if err != nil {
-		log.Errorf("invalid cache: %s", err.Error())
-		log.Info("cache is ignored")
-		workerStates = make([]CloudflareState, 0)
-	}
 
 	for _, account := range conf.CloudflareConfig.Accounts {
 		lapiStream := make(chan *models.DecisionsStreamResponse)
 		lapiStreams = append(lapiStreams, lapiStream)
-		states := make(map[string]*CloudflareState)
-		for _, s := range workerStates {
-			//TODO  search can be avoided by having a map by account id
-			tmp := s
-			if s.AccountID == account.ID {
-				states[s.Action] = &tmp
-			}
-		}
+
 		var tokenCallCount uint32 = 0
+		// we want same reference of tokenCallCount per account token
 		if _, ok := APICountByToken[account.Token]; !ok {
 			APICountByToken[account.Token] = &tokenCallCount
 		}
 
-		wg.Add(1)
 		worker := CloudflareWorker{
 			Account:         account,
 			APILogger:       APILogger,
@@ -244,9 +138,7 @@ func main() {
 			ZoneLocks:       zoneLocks,
 			LAPIStream:      lapiStream,
 			UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
-			Wg:              &wg,
-			UpdatedState:    stateStream,
-			CFStateByAction: states,
+			CFStateByAction: make(map[string]*CloudflareState),
 			tokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
@@ -254,7 +146,6 @@ func main() {
 				var err error = nil
 				defer func() {
 					workerTomb.Kill(err)
-					stateStream <- nil
 				}()
 
 				worker.CFStateByAction = nil
@@ -262,7 +153,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				err = worker.SetUpCloudflareIfNewState()
+				err = worker.SetUpCloudflareResources()
 				return err
 
 			})
@@ -271,7 +162,6 @@ func main() {
 				var err error = nil
 				defer func() {
 					workerTomb.Kill(err)
-					stateStream <- nil
 				}()
 				err = worker.Init()
 				if err != nil {
@@ -311,8 +201,8 @@ func main() {
 				log.Fatal("LAPI can't be reached")
 			}()
 			for {
-				decisions := <-csLAPI.Stream
 				// broadcast decision to each worker
+				decisions := <-csLAPI.Stream
 				for _, lapiStream := range lapiStreams {
 					lapiStream <- decisions
 				}
@@ -320,41 +210,12 @@ func main() {
 		})
 	}
 
-	stateTomb.Go(func() error {
-		aliveWorkerCount := len(conf.CloudflareConfig.Accounts)
-		for {
-			newStates := <-stateStream
-			if newStates == nil {
-				aliveWorkerCount--
-				if aliveWorkerCount == 0 {
-					err := stateTomb.Killf("all workers are dead")
-					return err
-				}
-			}
-			updateStates(&workerStates, newStates)
-			err := dumpStates(&workerStates, conf.CachePath)
-			log.Debug("updated cache")
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-		}
-	})
-
 	if conf.PrometheusConfig.Enabled {
 		serverTomb.Go(func() error {
 			http.Handle("/metrics", promhttp.Handler())
 			err := http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil)
 			return err
 		})
-	}
-
-	if conf.Daemon {
-		sent, err := daemon.SdNotify(false, "READY=1")
-		if !sent && err != nil {
-			log.Warnf("failed to notify: %v", err)
-		}
-		go HandleSignals()
 	}
 
 	apiCallCounterWindow := time.NewTicker(time.Second)
@@ -376,29 +237,17 @@ func main() {
 				log.Fatal(err)
 			}
 			if *onlySetup || *delete {
-				stateTomb.Wait()
 				if *delete {
-					err = deleteCacheIfExists(conf.CachePath)
-					if err != nil {
-						log.Errorf("while deleting cache got %s", err.Error())
-					}
 					log.Info("deleted all cf config")
 
 				} else {
 					log.Info("setup complete")
 				}
 			}
-			stateTomb.Kill(nil)
 			return
 		case <-dispatchTomb.Dying():
 			workerTomb.Kill(nil)
-			stateTomb.Kill(nil)
 			log.Fatal("dispatch is dying")
-
-		case <-stateTomb.Dying():
-			workerTomb.Kill(nil)
-			dispatchTomb.Kill(nil)
-			log.Fatal("state routine is dying")
 		}
 	}
 

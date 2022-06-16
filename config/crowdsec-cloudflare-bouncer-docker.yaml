@@ -1,6 +1,6 @@
 # CrowdSec Config
 crowdsec_lapi_url: http://localhost:8080/
-crowdsec_lapi_key: ${LAPI_KEY}
+crowdsec_lapi_key: ${API_KEY}
 crowdsec_update_frequency: 10s
 
 #Cloudflare Config. 
@@ -23,7 +23,6 @@ daemon: false
 log_mode: stdout
 log_dir: /var/log/ 
 log_level: info # valid choices are either debug, info, error 
-cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 
 prometheus:
   enabled: true

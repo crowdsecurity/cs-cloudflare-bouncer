@@ -53,7 +53,6 @@ type bouncerConfig struct {
 	LogMaxAge                   int              `yaml:"log_max_age"`
 	LogMaxFiles                 int              `yaml:"log_max_backups"`
 	CompressLogs                *bool            `yaml:"compress_logs"`
-	CachePath                   string           `yaml:"cache_path,omitempty"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 }
 
@@ -72,7 +71,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
-	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge'"
+	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge', 'managed_challenge'"
 
 	for i, account := range config.CloudflareConfig.Accounts {
 		if _, ok := accountIDSet[account.ID]; ok {
@@ -160,11 +159,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	} else if config.LogMode != "stdout" {
 		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
 	}
-
-	if config.CachePath == "" {
-		config.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
-	}
-
 	return config, nil
 }
 
@@ -194,7 +188,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		accounts, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{})
+		accounts, _, err := api.Accounts(ctx, cloudflare.AccountsListParams{})
 		if err != nil {
 			return "", err
 		}
@@ -278,7 +272,6 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.LogMode = "file"
 	cfg.LogDir = "/var/log/"
 	cfg.LogLevel = log.InfoLevel
-	cfg.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
 	cfg.ExcludeScenariosContaining = []string{
 		"ssh",
 		"ftp",
