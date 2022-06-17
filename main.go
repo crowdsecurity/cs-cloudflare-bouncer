@@ -180,6 +180,7 @@ func main() {
 	}
 
 	if !*onlySetup && !*delete {
+		log.Infof("Starting %s %s", name, version.VersionStr())
 		csLAPI = &csbouncer.StreamBouncer{
 			APIKey:         conf.CrowdSecLAPIKey,
 			APIUrl:         conf.CrowdSecLAPIUrl,

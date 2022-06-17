@@ -28,7 +28,7 @@ const CallsPerSecondLimit uint32 = 4
 var TotalIPListCapacity int = 10000
 
 var CloudflareActionByDecisionType = map[string]string{
-	"captcha":      "challenge",
+	"captcha":      "managed_challenge",
 	"ban":          "block",
 	"js_challenge": "js_challenge",
 }

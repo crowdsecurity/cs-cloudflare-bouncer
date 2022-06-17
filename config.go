@@ -96,7 +96,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		if _, ok := validAction[account.DefaultAction]; !ok {
 			return nil, fmt.Errorf("account %s 's default action is invalid. %s ", account.ID, validChoiceMsg)
 		}
-
+		zoneUsingChallenge := make([]string, 0)
 		for j, zone := range account.ZoneConfigs {
 			config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet = map[string]struct{}{}
 			if len(zone.Actions) == 0 {
@@ -106,6 +106,8 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 			for _, a := range zone.Actions {
 				if _, ok := validAction[a]; !ok {
 					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
+				} else if a == "challenge" {
+					zoneUsingChallenge = append(zoneUsingChallenge, zone.ID)
 				}
 				if a == account.DefaultAction {
 					defaultActionIsSupported = true
@@ -121,6 +123,12 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 				return nil, fmt.Errorf("zone id %s is duplicated", zone.ID)
 			}
 			zoneIdSet[zone.ID] = true
+		}
+		if len(zoneUsingChallenge) > 0 {
+			log.Warningf(
+				"zones %s uses 'challenge' action which is deprecated in favour of 'managed_challenge'. See migration guide at https://docs.crowdsec.net/docs/next/bouncers/cloudflare/#upgrading-from-v00x-to-v01y",
+				strings.Join(zoneUsingChallenge, ", "),
+			)
 		}
 	}
 	/*Configure logging*/
