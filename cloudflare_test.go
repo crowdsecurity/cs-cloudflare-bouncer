@@ -388,7 +388,7 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 				"block": {
 					&decision1,
 				},
-				"challenge": {
+				"managed_challenge": {
 					&decision2,
 				},
 			},
@@ -397,8 +397,8 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 			name: "with dups, all supported",
 			args: args{decisions: []*models.Decision{&decision2, &decision2dup}},
 			want: map[string][]*models.Decision{
-				"defaulted": {},
-				"challenge": {&decision2},
+				"defaulted":         {},
+				"managed_challenge": {&decision2},
 			},
 		},
 		{
@@ -419,9 +419,9 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 				decisions: []*models.Decision{&decisionUnsup, &decision1, &decision2},
 			},
 			want: map[string][]*models.Decision{
-				"defaulted": {},
-				"block":     {&decision1},
-				"challenge": {&decision2},
+				"defaulted":         {},
+				"block":             {&decision1},
+				"managed_challenge": {&decision2},
 			},
 		},
 	}
@@ -836,7 +836,7 @@ func Test_allZonesHaveAction(t *testing.T) {
 				zones: []ZoneConfig{
 					{
 						ActionSet: map[string]struct{}{
-							"challenge": {},
+							"managed_challenge": {},
 						},
 					},
 					{
