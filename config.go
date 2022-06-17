@@ -126,7 +126,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		}
 		if len(zoneUsingChallenge) > 0 {
 			log.Warningf(
-				"zones %s uses 'challenge' action which is deprecated in favour of 'managed_challenge'. See migration guide at ",
+				"zones %s uses 'challenge' action which is deprecated in favour of 'managed_challenge'. See migration guide at https://docs.crowdsec.net/docs/next/bouncers/cloudflare/#upgrading-from-v00x-to-v01y",
 				strings.Join(zoneUsingChallenge, ", "),
 			)
 		}
