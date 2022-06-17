@@ -55,6 +55,9 @@ type bouncerConfig struct {
 	CompressLogs                *bool            `yaml:"compress_logs"`
 	CachePath                   string           `yaml:"cache_path,omitempty"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
+	KeyPath                     string           `yaml:"key_path"`
+	CertPath                    string           `yaml:"cert_path"`
+	CAPath                      string           `yaml:"ca_path"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
