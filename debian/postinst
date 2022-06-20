@@ -9,22 +9,25 @@ if [ "$1" = "configure" ]; then
     type cscli
 
     if [ "$?" -eq "0" ] ; then
-        START=1
-        echo "cscli/crowdsec is present, generating API key"
-        unique=`date +%s`
-        API_KEY=`cscli -oraw bouncers add CloudflareBouncer-${unique}`
-        if [ $? -eq 1 ] ; then
-            echo "failed to create API token, service won't be started."
-            START=0
-            API_KEY="<API_KEY>"
-        else
-            echo "API Key : ${API_KEY}"
-        fi
+        must_generate=$(grep -s '${API_KEY}' /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml | wc -l)
+        if [ "$must_generate" -eq "1" ] ; then
+            START=1
+            echo "cscli/crowdsec is present, generating API key"
+            unique=`date +%s`
+            API_KEY=`cscli -oraw bouncers add CloudflareBouncer-${unique}`
+            if [ $? -eq 1 ] ; then
+                echo "failed to create API token, service won't be started."
+                START=0
+                API_KEY='${API_KEY}'
+            else
+                echo "API Key : ${API_KEY}"
+            fi
 
-        TMP=`mktemp -p /tmp/`
-        cp /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml ${TMP}
-        API_KEY=${API_KEY} envsubst < ${TMP} > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
-        rm ${TMP}
+            TMP=`mktemp -p /tmp/`
+            cp /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml ${TMP}
+            API_KEY=${API_KEY} envsubst < ${TMP} > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
+            rm ${TMP}
+        fi
     fi
 else
     START=1
