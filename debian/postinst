@@ -27,6 +27,8 @@ if [ "$1" = "configure" ]; then
             cp /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml ${TMP}
             API_KEY=${API_KEY} envsubst < ${TMP} > /etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml
             rm ${TMP}
+        else
+            echo "Not generating API key because already present"
         fi
     fi
 else
