@@ -9,10 +9,10 @@ cloudflare_config:
   - id: 
     token: 
     ip_list_prefix: crowdsec
-    default_action: challenge
+    default_action: managed_challenge
     zones:
     - actions: 
-      - challenge # valid choices are either of challenge, js_challenge, block
+      - managed_challenge # valid choices are either of managed_challenge, js_challenge, block
       zone_id:
     
 
