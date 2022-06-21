@@ -68,6 +68,44 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
+
+	/*Configure logging*/
+	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
+		log.Fatal(err.Error())
+	}
+	if config.LogMode == "file" {
+		if config.LogDir == "" {
+			config.LogDir = "/var/log/"
+		}
+		_maxsize := 40
+		if config.LogMaxSize != 0 {
+			_maxsize = config.LogMaxSize
+		}
+		_maxfiles := 3
+		if config.LogMaxFiles != 0 {
+			_maxfiles = config.LogMaxFiles
+		}
+		_maxage := 30
+		if config.LogMaxAge != 0 {
+			_maxage = config.LogMaxAge
+		}
+		_compress := true
+		if config.CompressLogs != nil {
+			_compress = *config.CompressLogs
+		}
+		logOutput := &lumberjack.Logger{
+			Filename:   config.LogDir + "/crowdsec-cloudflare-bouncer.log",
+			MaxSize:    _maxsize,
+			MaxBackups: _maxfiles,
+			MaxAge:     _maxage,
+			Compress:   _compress,
+		}
+		log.SetOutput(logOutput)
+		log.SetFormatter(&log.TextFormatter{TimestampFormat: "02-01-2006 15:04:05", FullTimestamp: true})
+	} else if config.LogMode != "stdout" {
+		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
+	}
+
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
 	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
@@ -130,42 +168,6 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 				strings.Join(zoneUsingChallenge, ", "),
 			)
 		}
-	}
-	/*Configure logging*/
-	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
-		log.Fatal(err.Error())
-	}
-	if config.LogMode == "file" {
-		if config.LogDir == "" {
-			config.LogDir = "/var/log/"
-		}
-		_maxsize := 40
-		if config.LogMaxSize != 0 {
-			_maxsize = config.LogMaxSize
-		}
-		_maxfiles := 3
-		if config.LogMaxFiles != 0 {
-			_maxfiles = config.LogMaxFiles
-		}
-		_maxage := 30
-		if config.LogMaxAge != 0 {
-			_maxage = config.LogMaxAge
-		}
-		_compress := true
-		if config.CompressLogs != nil {
-			_compress = *config.CompressLogs
-		}
-		logOutput := &lumberjack.Logger{
-			Filename:   config.LogDir + "/crowdsec-cloudflare-bouncer.log",
-			MaxSize:    _maxsize,
-			MaxBackups: _maxfiles,
-			MaxAge:     _maxage,
-			Compress:   _compress,
-		}
-		log.SetOutput(logOutput)
-		log.SetFormatter(&log.TextFormatter{TimestampFormat: "02-01-2006 15:04:05", FullTimestamp: true})
-	} else if config.LogMode != "stdout" {
-		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
 	}
 	return config, nil
 }
