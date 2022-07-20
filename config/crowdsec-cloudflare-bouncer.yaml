@@ -9,10 +9,10 @@ cloudflare_config:
   - id: <CLOUDFLARE_ACCOUNT_ID>
     token: <CLOUDFLARE_TOKEN>
     ip_list_prefix: crowdsec
-    default_action: challenge
+    default_action: managed_challenge
     zones:
     - actions: 
-      - challenge # valid choices are either of challenge, js_challenge, block
+      - managed_challenge # valid choices are either of managed_challenge, js_challenge, block
       zone_id:
     
 
@@ -27,7 +27,6 @@ log_max_size: 40
 log_max_age: 30
 log_max_backups: 3
 compress_logs: true
-cache_path: /var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json
 
 prometheus:
   enabled: true

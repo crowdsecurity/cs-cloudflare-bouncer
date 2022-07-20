@@ -53,7 +53,6 @@ type bouncerConfig struct {
 	LogMaxAge                   int              `yaml:"log_max_age"`
 	LogMaxFiles                 int              `yaml:"log_max_backups"`
 	CompressLogs                *bool            `yaml:"compress_logs"`
-	CachePath                   string           `yaml:"cache_path,omitempty"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 	KeyPath                     string           `yaml:"key_path"`
 	CertPath                    string           `yaml:"cert_path"`
@@ -72,61 +71,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
-	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
-	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
-	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
-	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge'"
 
-	for i, account := range config.CloudflareConfig.Accounts {
-		if _, ok := accountIDSet[account.ID]; ok {
-			return nil, fmt.Errorf("the account '%s' is duplicated", account.ID)
-		}
-		accountIDSet[account.ID] = true
-
-		if account.Token == "" {
-			return nil, fmt.Errorf("the account '%s' is missing token", account.ID)
-		}
-
-		if account.TotalIPListCapacity == nil {
-			config.CloudflareConfig.Accounts[i].TotalIPListCapacity = &TotalIPListCapacity
-		}
-		if account.IPListPrefix == "" {
-			config.CloudflareConfig.Accounts[i].IPListPrefix = "crowdsec"
-		}
-
-		if len(account.DefaultAction) == 0 {
-			return nil, fmt.Errorf("account %s has no default action", account.ID)
-		}
-		if _, ok := validAction[account.DefaultAction]; !ok {
-			return nil, fmt.Errorf("account %s 's default action is invalid. %s ", account.ID, validChoiceMsg)
-		}
-
-		for j, zone := range account.ZoneConfigs {
-			config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet = map[string]struct{}{}
-			if len(zone.Actions) == 0 {
-				return nil, fmt.Errorf("account %s 's zone %s has no action", account.ID, zone.ID)
-			}
-			defaultActionIsSupported := false
-			for _, a := range zone.Actions {
-				if _, ok := validAction[a]; !ok {
-					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
-				}
-				if a == account.DefaultAction {
-					defaultActionIsSupported = true
-				}
-				config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet[a] = struct{}{}
-			}
-
-			if !defaultActionIsSupported {
-				return nil, fmt.Errorf("zone %s doesn't support the default action %s for it's account", zone.ID, account.DefaultAction)
-			}
-
-			if _, ok := zoneIdSet[zone.ID]; ok {
-				return nil, fmt.Errorf("zone id %s is duplicated", zone.ID)
-			}
-			zoneIdSet[zone.ID] = true
-		}
-	}
 	/*Configure logging*/
 	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
 		log.Fatal(err.Error())
@@ -164,10 +109,69 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
 	}
 
-	if config.CachePath == "" {
-		config.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
-	}
+	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
+	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
+	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
+	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge', 'managed_challenge'"
 
+	for i, account := range config.CloudflareConfig.Accounts {
+		if _, ok := accountIDSet[account.ID]; ok {
+			return nil, fmt.Errorf("the account '%s' is duplicated", account.ID)
+		}
+		accountIDSet[account.ID] = true
+
+		if account.Token == "" {
+			return nil, fmt.Errorf("the account '%s' is missing token", account.ID)
+		}
+
+		if account.TotalIPListCapacity == nil {
+			config.CloudflareConfig.Accounts[i].TotalIPListCapacity = &TotalIPListCapacity
+		}
+		if account.IPListPrefix == "" {
+			config.CloudflareConfig.Accounts[i].IPListPrefix = "crowdsec"
+		}
+
+		if len(account.DefaultAction) == 0 {
+			return nil, fmt.Errorf("account %s has no default action", account.ID)
+		}
+		if _, ok := validAction[account.DefaultAction]; !ok {
+			return nil, fmt.Errorf("account %s 's default action is invalid. %s ", account.ID, validChoiceMsg)
+		}
+		zoneUsingChallenge := make([]string, 0)
+		for j, zone := range account.ZoneConfigs {
+			config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet = map[string]struct{}{}
+			if len(zone.Actions) == 0 {
+				return nil, fmt.Errorf("account %s 's zone %s has no action", account.ID, zone.ID)
+			}
+			defaultActionIsSupported := false
+			for _, a := range zone.Actions {
+				if _, ok := validAction[a]; !ok {
+					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
+				} else if a == "challenge" {
+					zoneUsingChallenge = append(zoneUsingChallenge, zone.ID)
+				}
+				if a == account.DefaultAction {
+					defaultActionIsSupported = true
+				}
+				config.CloudflareConfig.Accounts[i].ZoneConfigs[j].ActionSet[a] = struct{}{}
+			}
+
+			if !defaultActionIsSupported {
+				return nil, fmt.Errorf("zone %s doesn't support the default action %s for it's account", zone.ID, account.DefaultAction)
+			}
+
+			if _, ok := zoneIdSet[zone.ID]; ok {
+				return nil, fmt.Errorf("zone id %s is duplicated", zone.ID)
+			}
+			zoneIdSet[zone.ID] = true
+		}
+		if len(zoneUsingChallenge) > 0 {
+			log.Warningf(
+				"zones %s uses 'challenge' action which is deprecated in favour of 'managed_challenge'. See migration guide at https://docs.crowdsec.net/docs/next/bouncers/cloudflare/#upgrading-from-v00x-to-v01y",
+				strings.Join(zoneUsingChallenge, ", "),
+			)
+		}
+	}
 	return config, nil
 }
 
@@ -197,7 +201,7 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		accounts, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{})
+		accounts, _, err := api.Accounts(ctx, cloudflare.AccountsListParams{})
 		if err != nil {
 			return "", err
 		}
@@ -281,7 +285,6 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.LogMode = "file"
 	cfg.LogDir = "/var/log/"
 	cfg.LogLevel = log.InfoLevel
-	cfg.CachePath = "/var/lib/crowdsec/crowdsec-cloudflare-bouncer/cache/cloudflare-cache.json"
 	cfg.ExcludeScenariosContaining = []string{
 		"ssh",
 		"ftp",
