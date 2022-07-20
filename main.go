@@ -192,9 +192,9 @@ func main() {
 				ScenariosContaining:    strings.Join(conf.IncludeScenariosContaining, ","),
 				Origins:                strings.Join(conf.OnlyIncludeDecisionsFrom, ","),
 			},
-			CertPath: config.CertPath,
-			KeyPath:  config.KeyPath,
-			CAPath:   config.CAPath,
+			CertPath: conf.CertPath,
+			KeyPath:  conf.KeyPath,
+			CAPath:   conf.CAPath,
 		}
 		if err := csLAPI.Init(); err != nil {
 			log.Fatalf(err.Error())
