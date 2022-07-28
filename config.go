@@ -54,6 +54,9 @@ type bouncerConfig struct {
 	LogMaxFiles                 int              `yaml:"log_max_backups"`
 	CompressLogs                *bool            `yaml:"compress_logs"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
+	KeyPath                     string           `yaml:"key_path"`
+	CertPath                    string           `yaml:"cert_path"`
+	CAPath                      string           `yaml:"ca_cert_path"`
 }
 
 // NewConfig creates bouncerConfig from the file at provided path
@@ -70,7 +73,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 
 	/*Configure logging*/
-	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil); err != nil {
+	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil, false); err != nil {
 		log.Fatal(err.Error())
 	}
 	if config.LogMode == "file" {
