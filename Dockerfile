@@ -1,9 +1,9 @@
 
-ARG GOVERSION=1.16
+ARG GOVERSION=1.18
 
 FROM golang:${GOVERSION}-alpine AS build
 WORKDIR /go/src/cs-cloudflare-bouncer
-RUN apk update && apk add --no-cache  libc-dev make git
+RUN apk update && apk add --no-cache  libc-dev make git gcc
 COPY . .
 RUN make build
 
