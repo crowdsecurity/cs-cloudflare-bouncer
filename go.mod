@@ -1,5 +1,7 @@
 module github.com/crowdsecurity/cs-cloudflare-bouncer
 
+replace github.com/crowdsecurity/go-cs-bouncer => /home/shivam/work/go-cs-bouncer
+
 go 1.16
 
 require (
@@ -16,6 +18,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/prometheus/client_golang v1.11.0
 	github.com/sirupsen/logrus v1.9.0
+	go.mongodb.org/mongo-driver v1.10.1 // indirect
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
