@@ -18,6 +18,7 @@ import (
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/version"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -216,6 +217,7 @@ func main() {
 
 	if conf.PrometheusConfig.Enabled {
 		serverTomb.Go(func() error {
+			prometheus.MustRegister(csbouncer.TotalLAPICalls, csbouncer.TotalLAPIError)
 			http.Handle("/metrics", promhttp.Handler())
 			err := http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil)
 			return err
