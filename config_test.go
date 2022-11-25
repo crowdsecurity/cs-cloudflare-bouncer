@@ -23,23 +23,23 @@ func TestNewConfig(t *testing.T) {
 			args: args{"./test_data/valid_config.yaml"},
 			want: &bouncerConfig{
 				CrowdSecLAPIUrl:             "http://localhost:8080/",
-				CrowdSecLAPIKey:             "${API_KEY}",
+				CrowdSecLAPIKey:             "test",
 				CrowdsecUpdateFrequencyYAML: "10s",
 				CloudflareConfig: CloudflareConfig{
 					Accounts: []AccountConfig{
 						{
-							ID:                  "${CF_ACC_ID}",
+							ID:                  "test",
 							TotalIPListCapacity: &TotalIPListCapacity,
 							ZoneConfigs: []ZoneConfig{
 								{
-									ID:      "${CF_ZONE_ID}",
+									ID:      "test",
 									Actions: []string{"challenge"},
 									ActionSet: map[string]struct{}{
 										"challenge": {},
 									},
 								},
 							},
-							Token:         "${CF_TOKEN}",
+							Token:         "test",
 							IPListPrefix:  "crowdsec",
 							DefaultAction: "challenge",
 						},
