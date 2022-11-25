@@ -69,7 +69,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to read %s : %v", configPath, err)
 	}
 	configBuff := os.ExpandEnv(string(fcontent))
-	err = yaml.UnmarshalStrict([]byte(configBuff), &config)
+	err = yaml.Unmarshal([]byte(configBuff), &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
 	}
