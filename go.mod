@@ -3,14 +3,11 @@ module github.com/crowdsecurity/cs-cloudflare-bouncer
 go 1.16
 
 require (
-	ariga.io/atlas v0.3.7 // indirect
 	github.com/antonmedv/expr v1.9.0 // indirect
 	github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/crowdsecurity/crowdsec v1.4.0
 	github.com/crowdsecurity/go-cs-bouncer v0.0.0-20220720081100-22bbe2d6856f
 	github.com/crowdsecurity/grokky v0.1.0 // indirect
-	github.com/go-openapi/runtime v0.23.3 // indirect
 	github.com/go-openapi/spec v0.20.6 // indirect
 	github.com/go-openapi/strfmt v0.21.3 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
