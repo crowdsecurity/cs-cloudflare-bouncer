@@ -1,19 +1,5 @@
-# Ignore all
-*
-
-# Unignore all with extensions
-!*.*
-
-# Unignore all dirs
-!*/
-!Dockerfile
-
 # vscode
 .vscode
-
-# ignore make things 
-crowdsec-cloudflare-bouncer.tgz
-crowdsec-cloudflare-bouncer*/
 
 # Binaries for programs and plugins
 *.exe
@@ -21,7 +7,6 @@ crowdsec-cloudflare-bouncer*/
 *.dll
 *.so
 *.dylib
-
 
 # Test binary, built with `go test -c`
 *.test
@@ -31,3 +16,14 @@ crowdsec-cloudflare-bouncer*/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# built binaries
+/crowdsec-cloudflare-bouncer
+/crowdsec-cloudflare-bouncer.tgz
+/crowdsec-cloudflare-bouncer*/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
