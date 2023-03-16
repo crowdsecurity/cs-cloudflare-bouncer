@@ -1,6 +1,6 @@
 [packages]
 pytest-dotenv = "*"
-pytest-cs = {ref = "0.4.0", git = "https://github.com/crowdsecurity/pytest-cs.git"}
+pytest-cs = {ref = "0.5.0", git = "https://github.com/crowdsecurity/pytest-cs.git"}
 
 [dev-packages]
 gnureadline = "*"
