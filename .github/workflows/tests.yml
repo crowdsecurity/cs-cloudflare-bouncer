@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  API_KEY: test
-  CF_ACC_ID: test
-  CF_TOKEN: test
-  CF_ZONE_ID: test
-
 jobs:
   build:
     strategy:

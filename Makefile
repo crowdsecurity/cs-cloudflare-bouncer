@@ -52,6 +52,16 @@ build: goversion clean binary
 lint:
 	golangci-lint run
 
+API_KEY:=test
+CF_ACC_ID:=test
+CF_TOKEN:=test
+CF_ZONE_ID:=test
+
+export API_KEY
+export CF_ACC_ID
+export CF_TOKEN
+export CF_ZONE_ID
+
 .PHONY: test
 test:
 	@$(GOTEST) $(LD_OPTS) ./...
