@@ -22,6 +22,8 @@ else
 	export LD_OPTS=-ldflags "-a -s -w $(LD_OPTS_VARS)"
 endif
 
+LD_OPTS += -trimpath
+
 .PHONY: all
 all: build test
 
