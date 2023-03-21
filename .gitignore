@@ -19,8 +19,8 @@
 
 # built binaries
 /crowdsec-cloudflare-bouncer
+/crowdsec-cloudflare-bouncer-*
 /crowdsec-cloudflare-bouncer.tgz
-/crowdsec-cloudflare-bouncer*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,64 +1,37 @@
 # .github/workflows/build-docker-image.yml
 name: build-binary-package
 
-on: 
+on:
   release:
-    types: [prereleased, released]
+    types: prereleased
+
+env:
+  PROGRAM_NAME: crowdsec-cloudflare-bouncer
 
 jobs:
-  build-binary-package:
-    name: Build and upload binary package
+  build:
+    name: Build and upload all platforms
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, freebsd]
-        goarch: [amd64, arm64]
+
     steps:
-    - name: Set up Go 1.16
-      uses: actions/setup-go@v1
+
+    - name: Set up Go 1.20.1
+      uses: actions/setup-go@v3
       with:
-        go-version: 1.16
-      id: go
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
-    - name: Build the binaries
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-      run: make release
+        go-version: 1.20.1
+
+    - name: Check out repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Build all versions
+      run: |
+        make platform-all
+
     - name: Upload to release
-      uses: JasonEtco/upload-to-release@master
-      with:
-        args: crowdsec-cloudflare-bouncer-${{ env.GOOS }}-${{ env.GOARCH }}.tgz application/x-gzip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-  build-static-binary-package:
-    name: Build and upload static binary package
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, freebsd]
-        goarch: [amd64, arm64]
-    steps:
-    - name: Set up Go 1.16
-      uses: actions/setup-go@v1
-      with:
-        go-version: 1.16
-      id: go
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
-    - name: Build the binaries
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-      run: make release_static
-    - name: Upload to release
-      uses: JasonEtco/upload-to-release@master
-      with:
-        args: crowdsec-cloudflare-bouncer-${{ env.GOOS }}-${{ env.GOARCH }}-static.tgz application/x-gzip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
+      run: |
+        tag_name="${GITHUB_REF##*/}"
+        hub release edit $(find . -name "$PROGRAM_NAME*" -maxdepth 1 -printf "-a %p ") -m "" "$tag_name"
