@@ -17,13 +17,13 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# built binaries
-/crowdsec-cloudflare-bouncer
-/crowdsec-cloudflare-bouncer-*
-/crowdsec-cloudflare-bouncer.tgz
-
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
+
+# built binaries
+/crowdsec-cloudflare-bouncer
+/crowdsec-cloudflare-bouncer-*
+/crowdsec-cloudflare-bouncer.tgz
