@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -72,7 +71,7 @@ func main() {
 			log.Fatal(err)
 		}
 		if configOutputPath != nil && *configOutputPath != "" {
-			err := ioutil.WriteFile(*configOutputPath, []byte(cfg), 0664)
+			err := os.WriteFile(*configOutputPath, []byte(cfg), 0664)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -92,7 +91,7 @@ func main() {
 		log.SetOutput(os.Stdout)
 	}
 
-	var APILogger *log.Logger = log.New()
+	APILogger := log.New()
 	if *logAPIRequests {
 		f, err := os.OpenFile(conf.LogDir+"/crowdsec-cloudflare-bouncer-api-calls.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {

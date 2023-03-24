@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -113,7 +112,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 	}
 
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
-	zoneIdSet := make(map[string]bool)    // for verifying that each zoneID is unique
+	zoneIDSet := make(map[string]bool)    // for verifying that each zoneID is unique
 	validAction := map[string]bool{"challenge": true, "block": true, "js_challenge": true, "managed_challenge": true}
 	validChoiceMsg := "valid choices are either of 'block', 'js_challenge', 'challenge', 'managed_challenge'"
 
@@ -163,10 +162,10 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 				return nil, fmt.Errorf("zone %s doesn't support the default action %s for it's account", zone.ID, account.DefaultAction)
 			}
 
-			if _, ok := zoneIdSet[zone.ID]; ok {
+			if _, ok := zoneIDSet[zone.ID]; ok {
 				return nil, fmt.Errorf("zone id %s is duplicated", zone.ID)
 			}
-			zoneIdSet[zone.ID] = true
+			zoneIDSet[zone.ID] = true
 		}
 		if len(zoneUsingChallenge) > 0 {
 			log.Warningf(
@@ -181,7 +180,7 @@ func NewConfig(configPath string) (*bouncerConfig, error) {
 func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 	baseConfig := &bouncerConfig{}
 	hasBaseConfig := true
-	configBuff, err := ioutil.ReadFile(baseConfigPath)
+	configBuff, err := os.ReadFile(baseConfigPath)
 	if err != nil {
 		hasBaseConfig = false
 	}
