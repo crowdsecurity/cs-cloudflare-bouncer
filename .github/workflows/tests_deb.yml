@@ -1,4 +1,4 @@
-name: Build + tests
+name: Test .deb packaging
 
 on:
   push:
@@ -11,11 +11,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        go-version: ["1.20.3"]
-
-    name: "Build + tests"
+    name: "Test .deb packages"
     runs-on: ubuntu-latest
 
     steps:
@@ -25,22 +21,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Set up Go ${{ matrix.go-version }}
+    - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: ${{ matrix.go-version }}
-
-    - name: Build
-      run: |
-        make build
-
-    - name: Run unit tests
-      run: |
-        go install github.com/kyoh86/richgo@v0.3.12
-        set -o pipefail
-        make test | richgo testfilter
-      env:
-        RICHGO_FORCE_COLOR: 1
+        go-version: 1.20.3
 
     - name: Cache virtualenvs
       id: cache-pipenv
@@ -51,9 +35,10 @@ jobs:
 
     - name: Install functional test dependencies
       run: |
+        sudo apt install -y build-essential debhelper devscripts fakeroot lintian
+        docker network create net-test
         python3 -m pip install --upgrade pipenv wheel
         pipenv install --deploy
-        docker network create net-test
 
     - name: Run functional tests
       env:
@@ -61,16 +46,6 @@ jobs:
         CROWDSEC_TEST_FLAVORS: full
         CROWDSEC_TEST_NETWORK: net-test
         CROWDSEC_TEST_TIMEOUT: 60
+        PYTEST_ADDOPTS: --durations=0 -vv --color=yes
       run: |
-        pipenv run pytest --durations=0 --color=yes
-
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: v1.51
-        args: --issues-exit-code=1 --timeout 10m
-        only-new-issues: false
-        # the cache is already managed above, enabling it here
-        # gives errors when extracting
-        skip-pkg-cache: true
-        skip-build-cache: true
+        pipenv run pytest -m deb

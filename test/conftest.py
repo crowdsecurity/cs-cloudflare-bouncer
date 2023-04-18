@@ -1,23 +1,18 @@
-"""
-Full integration test with a real Crowdsec running in Docker
-"""
 
 import contextlib
-import os
-import pathlib
-
 import pytest
 
-SCRIPT_DIR = pathlib.Path(os.path.dirname(os.path.realpath(__file__)))
-PROJECT_ROOT = SCRIPT_DIR.parent
-cf_binary = PROJECT_ROOT.joinpath("crowdsec-cloudflare-bouncer")
 
-
-# Create a lapi container, registers a bouncer
-# and runs it with the updated config.
-# - Returns context manager that yields a tuple of (bouncer, lapi)
+# provide the name of the bouncer binary to test
 @pytest.fixture(scope='session')
-def bouncer_with_lapi(bouncer, crowdsec, cf_cfg_factory, api_key_factory, tmp_path_factory):
+def bouncer_under_test():
+    return 'crowdsec-cloudflare-bouncer'
+
+
+# Create a lapi container, register a bouncer and run it with the updated config.
+# - Return context manager that yields a tuple of (bouncer, lapi)
+@pytest.fixture(scope='session')
+def bouncer_with_lapi(bouncer, crowdsec, cf_cfg_factory, api_key_factory, tmp_path_factory, bouncer_binary):
     @contextlib.contextmanager
     def closure(config_lapi=None, config_bouncer=None, api_key=None):
         if config_bouncer is None:
@@ -35,11 +30,10 @@ def bouncer_with_lapi(bouncer, crowdsec, cf_cfg_factory, api_key_factory, tmp_pa
                 lapi.wait_for_http(8080, '/health')
                 port = lapi.probe.get_bound_port('8080')
                 cfg = cf_cfg_factory()
-                cfg.setdefault('crowdsec_config', {})
                 cfg['crowdsec_lapi_url'] = f'http://localhost:{port}/'
                 cfg['crowdsec_lapi_key'] = api_key
                 cfg.update(config_bouncer)
-                with bouncer(cf_binary, cfg) as cb:
+                with bouncer(cfg) as cb:
                     yield cb, lapi
         finally:
             pass

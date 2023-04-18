@@ -1,11 +1,9 @@
 import pytest
 
-from .conftest import cf_binary
-
 
 def test_no_api_key(crowdsec, bouncer, cf_cfg_factory):
     cfg = cf_cfg_factory()
-    with bouncer(cf_binary, cfg) as cf:
+    with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
             "*no API key nor certificate provided*",
         ])
@@ -14,7 +12,7 @@ def test_no_api_key(crowdsec, bouncer, cf_cfg_factory):
 
     cfg['crowdsec_lapi_key'] = ''
 
-    with bouncer(cf_binary, cfg) as cf:
+    with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
             "*no API key nor certificate provided*",
         ])
@@ -28,7 +26,7 @@ def test_no_lapi_url(bouncer, cf_cfg_factory):
 
     cfg['crowdsec_lapi_key'] = 'not-used'
 
-    with bouncer(cf_binary, cfg) as cf:
+    with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
             "*could not parse configuration: api_url is required*",
         ])
@@ -37,7 +35,7 @@ def test_no_lapi_url(bouncer, cf_cfg_factory):
 
     cfg['crowdsec_lapi_url'] = ''
 
-    with bouncer(cf_binary, cfg) as cf:
+    with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
             "*could not parse configuration: api_url is required*",
         ])
@@ -52,7 +50,7 @@ def test_no_lapi(bouncer, cf_cfg_factory):
     cfg['crowdsec_lapi_key'] = 'not-used'
     cfg['crowdsec_lapi_url'] = 'http://localhost:8237'
 
-    with bouncer(cf_binary, cfg) as cf:
+    with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
             "*LAPI can't be reached*"
         ])

@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   push_to_registry:
@@ -35,7 +36,7 @@ jobs:
           fi
           TAGS="${DOCKER_IMAGE}:${VERSION},${GHCR_IMAGE}:${VERSION}"
           if [[  "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "false" ]]; then
-            TAGS=$TAGS,${DOCKER_IMAGE}:latest,${GHCR_IMAGE}:${VERSION}
+            TAGS=$TAGS,${DOCKER_IMAGE}:latest,${GHCR_IMAGE}:latest
           fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT

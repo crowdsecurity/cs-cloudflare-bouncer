@@ -1,5 +1,4 @@
-
-ARG GOVERSION=1.20.1
+ARG GOVERSION=1.20.3
 
 FROM golang:${GOVERSION}-alpine AS build
 WORKDIR /go/src/cs-cloudflare-bouncer
