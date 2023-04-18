@@ -55,7 +55,6 @@ install_bouncer() {
 
 # --------------------------------- #
 
-set_colors
 install_bouncer
 
 systemctl enable "$SERVICE"
