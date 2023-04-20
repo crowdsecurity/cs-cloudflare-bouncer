@@ -12,9 +12,9 @@ override_dh_auto_clean:
 override_dh_auto_test:
 override_dh_auto_build:
 override_dh_auto_install:
-	make
+	@make build
 
-	BOUNCER=crowdsec-cloudflare-bouncer; \
+	@BOUNCER=crowdsec-cloudflare-bouncer; \
 	PKG="$$BOUNCER"; \
 	install -D "$$BOUNCER" -t "debian/$$PKG/usr/bin/"; \
 	install -D "scripts/_bouncer.sh" -t "debian/$$PKG/usr/lib/$$PKG/"; \
@@ -22,7 +22,7 @@ override_dh_auto_install:
 	BIN="/usr/bin/$$BOUNCER" CFG="/etc/crowdsec/bouncers" envsubst '$$BIN $$CFG' < "config/$$BOUNCER.service" | install -D /dev/stdin "debian/$$PKG/etc/systemd/system/$$BOUNCER.service"
 
 execute_after_dh_fixperms:
-	BOUNCER=crowdsec-cloudflare-bouncer; \
+	@BOUNCER=crowdsec-cloudflare-bouncer; \
 	PKG="$$BOUNCER"; \
 	chmod 0755 "debian/$$PKG/usr/bin/$$BOUNCER"; \
 	chmod 0600 "debian/$$PKG/usr/lib/$$PKG/_bouncer.sh"; \
