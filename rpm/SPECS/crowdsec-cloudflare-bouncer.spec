@@ -50,9 +50,6 @@ rm -rf %{buildroot}
 %post -p /usr/bin/sh
 systemctl daemon-reload
 
-BOUNCER="%{name}"
-BOUNCER_PREFIX="cloudflareBouncer"
-
 . /usr/lib/%{name}/_bouncer.sh
 START=1
 
@@ -70,7 +67,7 @@ echo "After configuration run the command 'sudo systemctl start $SERVICE' to sta
 echo "Don't forget to (re)generate CrowdSec API key if it is installed on another server or/and if you have upgraded and installed the package maintainer's version."
 
 if [ "$START" -eq 0 ]; then
-    echo "no api key was generated, you can generate one on your LAPI Server by running 'cscli bouncers add <bouncer_name>' and add it to '/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml'"
+    echo "no api key was generated, you can generate one on your LAPI Server by running 'cscli bouncers add <bouncer_name>' and add it to '$CONFIG'" >&2
 else
     %if 0%{?fc35}
     systemctl enable "$SERVICE"
@@ -83,7 +80,6 @@ fi
 - First initial packaging
 
 %preun -p /usr/bin/sh
-BOUNCER="%{name}"
 . /usr/lib/%{name}/_bouncer.sh
 
 if [ "$1" = "0" ]; then

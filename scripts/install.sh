@@ -2,9 +2,6 @@
 
 set -eu
 
-BOUNCER="crowdsec-cloudflare-bouncer"
-BOUNCER_PREFIX="crowdsec-cloudflare-bouncer"
-
 . ./scripts/_bouncer.sh
 
 assert_root
