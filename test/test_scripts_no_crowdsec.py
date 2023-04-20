@@ -30,7 +30,7 @@ def test_install_no_crowdsec(project_repo, bouncer_binary, must_be_root):
     with open(CONFIG) as f:
         y = yaml.safe_load(f)
         assert y['crowdsec_lapi_key'] == '<API_KEY>'
-        assert y['crowdsec_lapi_url'] == 'http://localhost:8080'
+        assert y['crowdsec_lapi_url'] == 'http://localhost:8080/'
 
     assert os.path.exists(CONFIG)
     assert os.stat(CONFIG).st_mode & 0o777 == 0o600
