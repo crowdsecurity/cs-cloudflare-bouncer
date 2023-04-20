@@ -74,7 +74,9 @@ func (cfAPI *mockCloudflareAPI) DeleteFirewallRule(ctx context.Context, zone str
 }
 func (cfAPI *mockCloudflareAPI) DeleteFirewallRules(ctx context.Context, zoneID string, firewallRuleIDs []string) error {
 	for _, rule := range firewallRuleIDs {
-		cfAPI.DeleteFirewallRule(ctx, zoneID, rule)
+		if err := cfAPI.DeleteFirewallRule(ctx, zoneID, rule); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -90,7 +92,9 @@ func (cfAPI *mockCloudflareAPI) DeleteFilter(ctx context.Context, zone string, i
 
 func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error {
 	for _, filterId := range filterIDs {
-		cfAPI.DeleteFilter(ctx, zoneID, filterId)
+		if err := cfAPI.DeleteFilter(ctx, zoneID, filterId); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -198,8 +202,15 @@ func TestIPFirewallSetUp(t *testing.T) {
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
 		tokenCallCount: &mockAPICallCounter,
 	}
-	worker.Init()
-	worker.SetUpCloudflareResources()
+
+	if err := worker.Init(); err != nil {
+		t.Error(err)
+	}
+
+	if err := worker.SetUpCloudflareResources(); err != nil {
+		t.Error(err)
+	}
+
 	ipLists, err := mockCfAPI.ListIPLists(ctx, "")
 
 	if err != nil {
@@ -243,8 +254,14 @@ func TestCollectLAPIStream(t *testing.T) {
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
 		tokenCallCount: &mockAPICallCounter,
 	}
-	worker.Init()
-	worker.createMissingIPLists()
+
+	if err := worker.Init(); err != nil {
+		t.Error(err)
+	}
+
+	if err := worker.createMissingIPLists(); err != nil {
+		t.Error(err)
+	}
 
 	worker.CollectLAPIStream(dummyResponse)
 	if len(worker.NewIPDecisions) != 1 {
