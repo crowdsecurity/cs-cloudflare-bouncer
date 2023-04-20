@@ -37,7 +37,7 @@ install_bouncer() {
         exit 1
     fi
     if [ -e "$BIN_PATH_INSTALLED" ]; then
-        msg warn "$BIN_PATH_INSTALLED is already installed. Exiting"
+        msg err "$BIN_PATH_INSTALLED is already installed. Exiting"
         exit 1
     fi
     msg info "Installing $BOUNCER"
