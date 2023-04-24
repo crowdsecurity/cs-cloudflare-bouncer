@@ -5,7 +5,6 @@ import yaml
 import pytest
 from pytest_cs.lib import cscli, text
 
-
 BOUNCER = "crowdsec-cloudflare-bouncer"
 CONFIG = f"/etc/crowdsec/bouncers/{BOUNCER}.yaml"
 
