@@ -37,7 +37,7 @@ def test_install_crowdsec(project_repo, bouncer_binary, must_be_root):
     with open(CONFIG) as f:
         y = yaml.safe_load(f)
         assert y['crowdsec_lapi_key'] == api_key
-        assert y['crowdsec_lapi_url'] == 'http://127.0.0.1:8080'
+        assert y['crowdsec_lapi_url'] == 'http://localhost:8080/'
 
     # the bouncer is registered
     with open(f"{CONFIG}.id") as f:
