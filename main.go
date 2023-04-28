@@ -5,10 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,6 +42,7 @@ func main() {
 	delete := flag.Bool("d", false, "delete IP lists and firewall rules which are created by the bouncer")
 	ver := flag.Bool("version", false, "Display version information and exit")
 	logAPIRequests := flag.Bool("lc", false, "logs API requests")
+	testConfig := flag.Bool("t", false, "test config and exit")
 
 	flag.Parse()
 
@@ -72,7 +73,7 @@ func main() {
 			log.Fatal(err)
 		}
 		if configOutputPath != nil && *configOutputPath != "" {
-			err := ioutil.WriteFile(*configOutputPath, []byte(cfg), 0664)
+			err := os.WriteFile(*configOutputPath, []byte(cfg), 0664)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -88,13 +89,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+ 	if *testConfig {
+		return
+	}
+
 	if *delete || *onlySetup {
 		log.SetOutput(os.Stdout)
 	}
 
-	var APILogger *log.Logger = log.New()
+	APILogger := log.New()
 	if *logAPIRequests {
-		f, err := os.OpenFile(conf.LogDir+"/crowdsec-cloudflare-bouncer-api-calls.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		f, err := os.OpenFile(
+			filepath.Join(conf.LogDir, "crowdsec-cloudflare-bouncer-api-calls.log"),
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -103,6 +110,7 @@ func main() {
 	} else {
 		APILogger.SetOutput(io.Discard)
 	}
+
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 

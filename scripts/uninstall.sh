@@ -1,18 +1,22 @@
 #!/bin/bash
 
-BIN_PATH_INSTALLED="/usr/local/bin/crowdsec-cloudflare-bouncer"
-CONFIG_DIR="/etc/crowdsec/crowdsec-cloudflare-bouncer/"
-LOG_FILE="/var/log/crowdsec-cloudflare-bouncer.log"
-SYSTEMD_PATH_FILE="/etc/systemd/system/crowdsec-cloudflare-bouncer.service"
+set -eu
+
+. ./scripts/_bouncer.sh
+
+assert_root
+
+# --------------------------------- #
 
 uninstall() {
-	systemctl stop crowdsec-cloudflare-bouncer
-	rm -rf "${CONFIG_DIR}"
-	rm -f "${SYSTEMD_PATH_FILE}"
-	rm -f "${BIN_PATH_INSTALLED}"
-	rm -f "${LOG_FILE}"
+    systemctl stop "$SERVICE" || true
+    delete_bouncer
+    rm -f "$CONFIG"
+    rm -f "$SYSTEMD_PATH_FILE"
+    rm -f "$BIN_PATH_INSTALLED"
+    rm -f "/var/log/$BOUNCER.log"
 }
 
 uninstall
-
-echo "crowdsec-cloudflare-bouncer uninstall successfully"
+msg succ "$BOUNCER has been successfully uninstalled"
+exit 0

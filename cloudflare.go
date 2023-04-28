@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"reflect"
@@ -347,7 +346,9 @@ func (worker *CloudflareWorker) importExistingInfra() error {
 	}
 	for _, state := range worker.CFStateByAction {
 		if state.IPListState.IPList != nil {
-			worker.importRulesAndFiltersForExistingIPList(state.IPListState.IPList.Name)
+			if err := worker.importRulesAndFiltersForExistingIPList(state.IPListState.IPList.Name); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -464,6 +465,7 @@ func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) erro
 	return nil
 }
 
+// nolint: unused
 func (worker *CloudflareWorker) getIPListID(IPListName string, IPLists []cloudflare.IPList) *string {
 	for _, ipList := range IPLists {
 		if ipList.Name == IPListName {
@@ -599,13 +601,13 @@ func (worker *CloudflareWorker) UpdateIPLists() error {
 				CreatedAt: time.Now(),
 			}
 			defer func(action string) {
-				ipListId := worker.CFStateByAction[action].IPListState.IPList.ID
-				items, err := worker.getAPI().ListIPListItems(worker.Ctx, worker.Account.ID, ipListId)
+				ipListID := worker.CFStateByAction[action].IPListState.IPList.ID
+				items, err := worker.getAPI().ListIPListItems(worker.Ctx, worker.Account.ID, ipListID)
 				if err != nil {
 					worker.Logger.Error(err)
 					return
 				}
-				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, worker.Account.ID, ipListId, cloudflare.IPListItemDeleteRequest{
+				_, err = worker.getAPI().DeleteIPListItems(worker.Ctx, worker.Account.ID, ipListID, cloudflare.IPListItemDeleteRequest{
 					Items: []cloudflare.IPListItemDeleteItemRequest{
 						{
 							ID: items[0].ID,
@@ -687,7 +689,7 @@ func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) 
 	if req.Body != nil {
 		var buf bytes.Buffer
 		tmp := io.TeeReader(req.Body, &buf)
-		body, err := ioutil.ReadAll(tmp)
+		body, err := io.ReadAll(tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -710,7 +712,7 @@ func NewCloudflareClient(token string, accountID string, logger *log.Logger) (*c
 			logger:  logger,
 		},
 	}
-	z, err := cloudflare.NewWithAPIToken(token, cloudflare.UsingAccount(accountID), cloudflare.HTTPClient(httpClient))
+	z, err := cloudflare.NewWithAPIToken(token, cloudflare.HTTPClient(httpClient))
 	return z, err
 }
 
