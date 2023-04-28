@@ -346,7 +346,9 @@ func (worker *CloudflareWorker) importExistingInfra() error {
 	}
 	for _, state := range worker.CFStateByAction {
 		if state.IPListState.IPList != nil {
-			worker.importRulesAndFiltersForExistingIPList(state.IPListState.IPList.Name)
+			if err := worker.importRulesAndFiltersForExistingIPList(state.IPListState.IPList.Name); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -463,6 +465,7 @@ func (worker *CloudflareWorker) removeIPListDependencies(IPListName string) erro
 	return nil
 }
 
+// nolint: unused
 func (worker *CloudflareWorker) getIPListID(IPListName string, IPLists []cloudflare.IPList) *string {
 	for _, ipList := range IPLists {
 		if ipList.Name == IPListName {
@@ -709,7 +712,7 @@ func NewCloudflareClient(token string, accountID string, logger *log.Logger) (*c
 			logger:  logger,
 		},
 	}
-	z, err := cloudflare.NewWithAPIToken(token, cloudflare.UsingAccount(accountID), cloudflare.HTTPClient(httpClient))
+	z, err := cloudflare.NewWithAPIToken(token, cloudflare.HTTPClient(httpClient))
 	return z, err
 }
 
