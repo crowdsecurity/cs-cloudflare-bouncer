@@ -14,14 +14,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
-	"github.com/crowdsecurity/crowdsec/pkg/models"
-	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version"
-	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
 	"gopkg.in/tomb.v2"
+
+	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
+	"github.com/crowdsecurity/crowdsec/pkg/models"
+	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cf"
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cfg"
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version"
 )
 
 const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
@@ -68,7 +72,7 @@ func main() {
 	}
 
 	if configTokens != nil && *configTokens != "" {
-		cfg, err := ConfigTokens(*configTokens, *configPath)
+		cfg, err := cfg.ConfigTokens(*configTokens, *configPath)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -84,12 +88,12 @@ func main() {
 		return
 	}
 
-	conf, err := NewConfig(*configPath)
+	conf, err := cfg.NewConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
- 	if *testConfig {
+	if *testConfig {
 		return
 	}
 
@@ -114,10 +118,10 @@ func main() {
 	var csLAPI *csbouncer.StreamBouncer
 	ctx := context.Background()
 
-	zoneLocks := make([]ZoneLock, 0)
+	zoneLocks := make([]cf.ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
 		for _, zone := range account.ZoneConfigs {
-			zoneLocks = append(zoneLocks, ZoneLock{ZoneID: zone.ID, Lock: &sync.Mutex{}})
+			zoneLocks = append(zoneLocks, cf.ZoneLock{ZoneID: zone.ID, Lock: &sync.Mutex{}})
 		}
 	}
 
@@ -139,15 +143,15 @@ func main() {
 			APICountByToken[account.Token] = &tokenCallCount
 		}
 
-		worker := CloudflareWorker{
+		worker := cf.CloudflareWorker{
 			Account:         account,
 			APILogger:       APILogger,
 			Ctx:             ctx,
 			ZoneLocks:       zoneLocks,
 			LAPIStream:      lapiStream,
 			UpdateFrequency: conf.CloudflareConfig.UpdateFrequency,
-			CFStateByAction: make(map[string]*CloudflareState),
-			tokenCallCount:  APICountByToken[account.Token],
+			CFStateByAction: make(map[string]*cf.CloudflareState),
+			TokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
 			workerTomb.Go(func() error {
@@ -175,7 +179,7 @@ func main() {
 				if err != nil {
 					return nil
 				}
-				err = worker.deleteExistingIPList()
+				err = worker.DeleteExistingIPList()
 				return err
 
 			})

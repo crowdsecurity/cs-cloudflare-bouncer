@@ -7,26 +7,25 @@ include_scenarios_containing: [] # ignore IPs banned for triggering scenarios no
 exclude_scenarios_containing: [] # ignore IPs banned for triggering scenarios containing either of provided word EG ["ssh", "smb"]
 only_include_decisions_from: [] #  only include IPs banned due to decisions orginating from provided sources. EG ["cscli", "crowdsec"]
 
-#Cloudflare Config. 
+#Cloudflare Config.
 cloudflare_config:
-  accounts: 
+  accounts:
   - id: <CLOUDFLARE_ACCOUNT_ID>
     token: <CLOUDFLARE_TOKEN>
     ip_list_prefix: crowdsec
     default_action: managed_challenge
     zones:
-    - actions: 
+    - actions:
       - managed_challenge # valid choices are either of managed_challenge, js_challenge, block
       zone_id:
-    
 
-  update_frequency: 30s # the frequency to update the cloudflare IP list 
+  update_frequency: 30s # the frequency to update the cloudflare IP list
 
 # Bouncer Config
 daemon: true
 log_mode: file
-log_dir: /var/log/ 
-log_level: info # valid choices are either debug, info, error 
+log_dir: /var/log/
+log_level: info # valid choices are either debug, info, error
 log_max_size: 40
 log_max_age: 30
 log_max_backups: 3

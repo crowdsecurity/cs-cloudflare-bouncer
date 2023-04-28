@@ -1,4 +1,4 @@
-package main
+package cf
 
 import (
 	"context"
@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflare-go"
-	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/crowdsecurity/crowdsec/pkg/models"
+
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cfg"
 )
 
 var mockAPICallCounter uint32 = 0
@@ -91,8 +94,8 @@ func (cfAPI *mockCloudflareAPI) DeleteFilter(ctx context.Context, zone string, i
 }
 
 func (cfAPI *mockCloudflareAPI) DeleteFilters(ctx context.Context, zoneID string, filterIDs []string) error {
-	for _, filterId := range filterIDs {
-		if err := cfAPI.DeleteFilter(ctx, zoneID, filterId); err != nil {
+	for _, filterID := range filterIDs {
+		if err := cfAPI.DeleteFilter(ctx, zoneID, filterID); err != nil {
 			return err
 		}
 	}
@@ -164,9 +167,9 @@ func (cfAPI *mockCloudflareAPI) ReplaceIPListItemsAsync(ctx context.Context, acc
 	return cloudflare.IPListItemCreateResponse{}, nil
 }
 
-var dummyCFAccount AccountConfig = AccountConfig{
+var dummyCFAccount = cfg.AccountConfig{
 	ID: "dummyID",
-	ZoneConfigs: []ZoneConfig{
+	ZoneConfigs: []cfg.ZoneConfig{
 		{
 			ID:      "zone1",
 			Actions: []string{"block"},
@@ -174,7 +177,7 @@ var dummyCFAccount AccountConfig = AccountConfig{
 	},
 	IPListPrefix:        "crowdsec",
 	DefaultAction:       "block",
-	TotalIPListCapacity: &TotalIPListCapacity,
+	TotalIPListCapacity: &cfg.TotalIPListCapacity,
 }
 
 var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
@@ -200,7 +203,7 @@ func TestIPFirewallSetUp(t *testing.T) {
 		API:            mockCfAPI,
 		Account:        dummyCFAccount,
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
-		tokenCallCount: &mockAPICallCounter,
+		TokenCallCount: &mockAPICallCounter,
 	}
 
 	if err := worker.Init(); err != nil {
@@ -252,7 +255,7 @@ func TestCollectLAPIStream(t *testing.T) {
 		Account:        dummyCFAccount,
 		API:            mockCfAPI,
 		Count:          prometheus.NewCounter(prometheus.CounterOpts{}),
-		tokenCallCount: &mockAPICallCounter,
+		TokenCallCount: &mockAPICallCounter,
 	}
 
 	if err := worker.Init(); err != nil {
@@ -554,7 +557,7 @@ func TestCloudflareWorker_SendASBans(t *testing.T) {
 				CFStateByAction: tt.fields.CFStateByAction,
 				NewASDecisions:  tt.fields.NewASDecisions,
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
-				tokenCallCount:  &mockAPICallCounter,
+				TokenCallCount:  &mockAPICallCounter,
 			}
 			worker.CFStateByAction = make(map[string]*CloudflareState)
 			worker.Account = dummyCFAccount
@@ -636,7 +639,7 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 				CFStateByAction:    tt.fields.CFStateByAction,
 				ExpiredASDecisions: tt.fields.ExpiredASDecisions,
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
-				tokenCallCount:     &mockAPICallCounter,
+				TokenCallCount:     &mockAPICallCounter,
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteASBans()
@@ -706,7 +709,7 @@ func TestCloudflareWorker_SendCountryBans(t *testing.T) {
 				CFStateByAction:     tt.fields.CFStateByAction,
 				NewCountryDecisions: tt.fields.NewCountryDecisions,
 				Logger:              log.WithFields(log.Fields{"account_id": "test worker"}),
-				tokenCallCount:      &mockAPICallCounter,
+				TokenCallCount:      &mockAPICallCounter,
 			}
 			worker.CFStateByAction = make(map[string]*CloudflareState)
 			worker.Account = dummyCFAccount
@@ -797,7 +800,7 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 				CFStateByAction:         tt.fields.CFStateByAction,
 				ExpiredCountryDecisions: tt.fields.ExpiredCountryDecisions,
 				Logger:                  log.WithFields(log.Fields{"account_id": "test worker"}),
-				tokenCallCount:          &mockAPICallCounter,
+				TokenCallCount:          &mockAPICallCounter,
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteCountryBans()
@@ -820,7 +823,7 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 
 func Test_allZonesHaveAction(t *testing.T) {
 	type args struct {
-		zones  []ZoneConfig
+		zones  []cfg.ZoneConfig
 		action string
 	}
 	tests := []struct {
@@ -831,7 +834,7 @@ func Test_allZonesHaveAction(t *testing.T) {
 		{
 			name: "true",
 			args: args{
-				zones: []ZoneConfig{
+				zones: []cfg.ZoneConfig{
 					{
 						ActionSet: map[string]struct{}{
 							"block": {},
@@ -850,7 +853,7 @@ func Test_allZonesHaveAction(t *testing.T) {
 		{
 			name: "false",
 			args: args{
-				zones: []ZoneConfig{
+				zones: []cfg.ZoneConfig{
 					{
 						ActionSet: map[string]struct{}{
 							"managed_challenge": {},
@@ -894,7 +897,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 	}
 
 	type fields struct {
-		Account         AccountConfig
+		Account         cfg.AccountConfig
 		CFStateByAction map[string]*CloudflareState
 		NewIPDecisions  []*models.Decision
 		API             cloudflareAPI
@@ -943,7 +946,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				API:             mockCfAPI,
 				Logger:          log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:           promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test%d", i), Help: "no help you're just a test"}),
-				tokenCallCount:  &mockAPICallCounter,
+				TokenCallCount:  &mockAPICallCounter,
 			}
 			err := worker.UpdateIPLists()
 			if err != nil {
@@ -977,7 +980,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 	}
 
 	type fields struct {
-		Account            AccountConfig
+		Account            cfg.AccountConfig
 		CFStateByAction    map[string]*CloudflareState
 		ExpiredIPDecisions []*models.Decision
 		API                cloudflareAPI
@@ -1026,7 +1029,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				API:                mockCfAPI,
 				Logger:             log.WithFields(log.Fields{"account_id": "test worker"}),
 				Count:              promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("test2%d", i), Help: "no help you're just a test"}),
-				tokenCallCount:     &mockAPICallCounter,
+				TokenCallCount:     &mockAPICallCounter,
 			}
 			err := worker.UpdateIPLists()
 			if err != nil {
