@@ -72,18 +72,18 @@ func main() {
 	}
 
 	if configTokens != nil && *configTokens != "" {
-		cfg, err := cfg.ConfigTokens(*configTokens, *configPath)
+		cfgTokenString, err := cfg.ConfigTokens(*configTokens, *configPath)
 		if err != nil {
 			log.Fatal(err)
 		}
 		if configOutputPath != nil && *configOutputPath != "" {
-			err := os.WriteFile(*configOutputPath, []byte(cfg), 0664)
+			err := os.WriteFile(*configOutputPath, []byte(cfgTokenString), 0664)
 			if err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("Config successfully generated in %s", *configOutputPath)
 		} else {
-			fmt.Print(cfg)
+			fmt.Print(cfgTokenString)
 		}
 		return
 	}
