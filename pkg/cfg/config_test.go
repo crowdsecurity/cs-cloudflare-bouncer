@@ -1,4 +1,4 @@
-package main
+package cfg
 
 import (
 	"reflect"
@@ -20,7 +20,7 @@ func TestNewConfig(t *testing.T) {
 	}{
 		{
 			name: "valid",
-			args: args{"./test_data/valid_config.yaml"},
+			args: args{"./testdata/valid_config.yaml"},
 			want: &bouncerConfig{
 				CrowdSecLAPIUrl:             "http://localhost:8080/",
 				CrowdSecLAPIKey:             "test",
@@ -55,13 +55,13 @@ func TestNewConfig(t *testing.T) {
 		},
 		{
 			name:    "invalid time",
-			args:    args{"/test_data/invalid_config_time.yaml"},
+			args:    args{"/testdata/invalid_config_time.yaml"},
 			want:    nil,
 			wantErr: true,
 		},
 		{
 			name:    "invalid time",
-			args:    args{"/test_data/invalid_config_remedy.yaml"},
+			args:    args{"/testdata/invalid_config_remedy.yaml"},
 			want:    nil,
 			wantErr: true,
 		},

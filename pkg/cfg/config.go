@@ -1,4 +1,4 @@
-package main
+package cfg
 
 import (
 	"context"
@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflare-go"
-	"github.com/crowdsecurity/crowdsec/pkg/types"
-	"github.com/crowdsecurity/crowdsec/pkg/yamlpatch"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/crowdsecurity/crowdsec/pkg/types"
+	"github.com/crowdsecurity/crowdsec/pkg/yamlpatch"
 )
+
+var TotalIPListCapacity int = 10000
 
 type ZoneConfig struct {
 	ID        string              `yaml:"zone_id"`

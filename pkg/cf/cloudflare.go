@@ -1,4 +1,4 @@
-package main
+package cf
 
 import (
 	"bytes"
@@ -15,16 +15,16 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflare-go"
-	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	log "github.com/sirupsen/logrus"
+
+	"github.com/crowdsecurity/crowdsec/pkg/models"
+
+	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cfg"
 )
 
 const CallsPerSecondLimit uint32 = 4
-
-var TotalIPListCapacity int = 10000
 
 var CloudflareActionByDecisionType = map[string]string{
 	"captcha":      "managed_challenge",
@@ -85,7 +85,7 @@ func setToExprList(set map[string]struct{}, quotes bool) string {
 	return fmt.Sprintf("{%s}", strings.Join(items, " "))
 }
 
-func allZonesHaveAction(zones []ZoneConfig, action string) bool {
+func allZonesHaveAction(zones []cfg.ZoneConfig, action string) bool {
 	allSupport := true
 	for _, zone := range zones {
 		if _, allSupport = zone.ActionSet[action]; !allSupport {
@@ -146,7 +146,7 @@ func (cfState *CloudflareState) UpdateExpr() bool {
 type CloudflareWorker struct {
 	Logger                  *log.Entry
 	APILogger               *log.Logger
-	Account                 AccountConfig
+	Account                 cfg.AccountConfig
 	ZoneLocks               []ZoneLock
 	Zones                   []cloudflare.Zone
 	FirewallRulesByZoneID   map[string]*[]cloudflare.FirewallRule
@@ -162,7 +162,7 @@ type CloudflareWorker struct {
 	ExpiredCountryDecisions []*models.Decision
 	API                     cloudflareAPI
 	Count                   prometheus.Counter
-	tokenCallCount          *uint32
+	TokenCallCount          *uint32
 }
 
 // this is useful for testing allowing us to mock it.
@@ -254,8 +254,8 @@ func (worker *CloudflareWorker) getMutexByZoneID(zoneID string) (*sync.Mutex, er
 }
 
 func (worker *CloudflareWorker) getAPI() cloudflareAPI {
-	atomic.AddUint32(worker.tokenCallCount, 1)
-	if *worker.tokenCallCount > CallsPerSecondLimit {
+	atomic.AddUint32(worker.TokenCallCount, 1)
+	if *worker.TokenCallCount > CallsPerSecondLimit {
 		time.Sleep(time.Second)
 	}
 	TotalAPICalls.Inc()
@@ -386,7 +386,7 @@ func (worker *CloudflareWorker) deleteFiltersContainingStringFromZoneIDs(str str
 	return nil
 }
 
-func (worker *CloudflareWorker) deleteExistingIPList() error {
+func (worker *CloudflareWorker) DeleteExistingIPList() error {
 	worker.Logger.Info("Getting all IP lists")
 	IPLists, err := worker.getAPI().ListIPLists(worker.Ctx, worker.Account.ID)
 	if err != nil {
@@ -705,7 +705,7 @@ func (lrt InterceptLogger) RoundTrip(req *http.Request) (*http.Response, error) 
 	return res, e
 }
 
-func NewCloudflareClient(token string, accountID string, logger *log.Logger) (*cloudflare.API, error) {
+func NewCloudflareClient(token string, logger *log.Logger) (*cloudflare.API, error) {
 	httpClient := &http.Client{
 		Transport: InterceptLogger{
 			Tripper: http.DefaultTransport,
@@ -720,7 +720,7 @@ func (worker *CloudflareWorker) Init() error {
 	var err error
 	worker.Logger = log.WithFields(log.Fields{"account_id": worker.Account.ID})
 	if worker.API == nil { // this for easy swapping during tests
-		worker.API, err = NewCloudflareClient(worker.Account.Token, worker.Account.ID, worker.APILogger)
+		worker.API, err = NewCloudflareClient(worker.Account.Token, worker.APILogger)
 		if err != nil {
 			worker.Logger.Error(err.Error())
 			return err
@@ -881,7 +881,7 @@ func keepLatestNIPSetItems(set map[string]IPSetItem, n int) (map[string]IPSetIte
 	return newSet, dropCount
 }
 
-func (worker *CloudflareWorker) normalizeActionForZone(action string, zoneCfg ZoneConfig) string {
+func (worker *CloudflareWorker) normalizeActionForZone(action string, zoneCfg cfg.ZoneConfig) string {
 	zoneLogger := worker.Logger.WithFields(log.Fields{"zone_id": zoneCfg.ID})
 	if _, spAction := zoneCfg.ActionSet[action]; action == "defaulted" || !spAction {
 		if action != "defaulted" {
