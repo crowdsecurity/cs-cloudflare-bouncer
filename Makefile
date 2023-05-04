@@ -1,3 +1,6 @@
+BUILD_REQUIRE_GO_MAJOR ?= 1
+BUILD_REQUIRE_GO_MINOR ?= 20
+
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
@@ -57,7 +60,7 @@ binary: goversion
 	$(GOBUILD) $(LD_OPTS) $(BUILD_VENDOR_FLAGS) -o $(BINARY_NAME)
 
 .PHONY: build
-build: goversion clean binary
+build: clean binary
 
 #
 # Unit and integration tests
@@ -78,7 +81,7 @@ export CF_TOKEN
 export CF_ZONE_ID
 
 .PHONY: test
-test:
+test: goversion
 	@$(GOTEST) $(LD_OPTS) ./...
 
 .PHONY: func-tests
@@ -92,7 +95,7 @@ func-tests: build
 
 RELDIR = $(BINARY_NAME)-$(BUILD_VERSION)
 
-# Called during release, to reuse the directory for other platforms
+# Called during platform-all, to reuse the directory for other platforms
 .PHONY: clean-release-dir
 clean-release-dir:
 	@$(RM) -r $(RELDIR)
@@ -124,5 +127,4 @@ release: clean tarball
 platform-all: goversion clean
 	python3 .github/release.py run-build $(BINARY_NAME)
 
-# Check if go is the right version
 include mk/goversion.mk
