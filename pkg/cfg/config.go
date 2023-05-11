@@ -3,6 +3,7 @@ package cfg
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -63,18 +64,29 @@ type bouncerConfig struct {
 	CAPath                      string           `yaml:"ca_cert_path"`
 }
 
-// NewConfig creates bouncerConfig from the file at provided path
-func NewConfig(configPath string) (*bouncerConfig, error) {
-	config := &bouncerConfig{}
+func MergedConfig(configPath string) ([]byte, error) {
 	patcher := yamlpatch.NewPatcher(configPath, ".local")
-	fcontent, err := patcher.MergedPatchContent()
+	data, err := patcher.MergedPatchContent()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s : %v", configPath, err)
+		return nil, err
 	}
-	configBuff := os.ExpandEnv(string(fcontent))
+	return data, nil
+}
+
+// NewConfig creates bouncerConfig from the file at provided path
+func NewConfig(reader io.Reader) (*bouncerConfig, error) {
+	config := &bouncerConfig{}
+
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	configBuff := os.ExpandEnv(string(content))
+
 	err = yaml.Unmarshal([]byte(configBuff), &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal %s : %v", configPath, err)
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
 	}
 
 	/*Configure logging*/

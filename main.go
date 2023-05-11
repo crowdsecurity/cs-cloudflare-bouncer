@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -28,13 +29,12 @@ import (
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version"
 )
 
-const DEFAULT_CONFIG_PATH string = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
 const (
+	DEFAULT_CONFIG_PATH = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
 	name = "crowdsec-cloudflare-bouncer"
 )
 
 func main() {
-
 	// Create go routine per cloudflare account
 	// By using channels, after every nth second feed the decisions to each cf routine.
 	// Each cf routine maintains it's own IP list and cache.
@@ -47,6 +47,7 @@ func main() {
 	ver := flag.Bool("version", false, "Display version information and exit")
 	logAPIRequests := flag.Bool("lc", false, "logs API requests")
 	testConfig := flag.Bool("t", false, "test config and exit")
+	showConfig := flag.Bool("T", false, "show full config (.yaml + .yaml.local) and exit")
 
 	flag.Parse()
 
@@ -88,12 +89,23 @@ func main() {
 		return
 	}
 
-	conf, err := cfg.NewConfig(*configPath)
+	configBytes, err := cfg.MergedConfig(*configPath)
+	if err != nil {
+		log.Fatalf("unable to load config: %v", err)
+	}
+
+	if *showConfig {
+		fmt.Println(string(configBytes))
+		return
+	}
+
+	conf, err := cfg.NewConfig(bytes.NewReader(configBytes))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if *testConfig {
+		log.Info("config is valid")
 		return
 	}
 
