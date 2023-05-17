@@ -71,7 +71,7 @@ func TestNewConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reader, err := os.Open(tt.args.configPath)
 			if err != nil {
-				t.Errorf("NewConfig() error = %+v", err)
+				t.Errorf("Open() error = %+v", err)
 				return
 			}
 			got, err := NewConfig(reader)
