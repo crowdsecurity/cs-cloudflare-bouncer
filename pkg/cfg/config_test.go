@@ -1,6 +1,7 @@
 package cfg
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -55,20 +56,25 @@ func TestNewConfig(t *testing.T) {
 		},
 		{
 			name:    "invalid time",
-			args:    args{"/testdata/invalid_config_time.yaml"},
+			args:    args{"./testdata/invalid_config_time.yaml"},
 			want:    nil,
 			wantErr: true,
 		},
 		{
 			name:    "invalid time",
-			args:    args{"/testdata/invalid_config_remedy.yaml"},
+			args:    args{"./testdata/invalid_config_remedy.yaml"},
 			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewConfig(tt.args.configPath)
+			reader, err := os.Open(tt.args.configPath)
+			if err != nil {
+				t.Errorf("Open() error = %+v", err)
+				return
+			}
+			got, err := NewConfig(reader)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewConfig() error = %+v, wantErr %+v", err, tt.wantErr)
 				return
