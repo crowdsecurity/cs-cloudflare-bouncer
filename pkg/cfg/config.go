@@ -13,8 +13,10 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
 
+	"github.com/crowdsecurity/go-cs-lib/pkg/ptr"
+	"github.com/crowdsecurity/go-cs-lib/pkg/yamlpatch"
+
 	"github.com/crowdsecurity/crowdsec/pkg/types"
-	"github.com/crowdsecurity/crowdsec/pkg/yamlpatch"
 )
 
 var TotalIPListCapacity int = 10000
@@ -315,7 +317,7 @@ func setDefaults(cfg *bouncerConfig) {
 	}
 	cfg.LogMaxAge = 30
 	cfg.LogMaxSize = 40
-	cfg.CompressLogs = types.BoolPtr(true)
+	cfg.CompressLogs = ptr.Of(true)
 	cfg.LogMaxFiles = 3
 
 	cfg.PrometheusConfig = PrometheusConfig{
