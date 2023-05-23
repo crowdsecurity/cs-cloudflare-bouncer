@@ -23,10 +23,10 @@ import (
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/crowdsecurity/go-cs-lib/pkg/version"
 
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cf"
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cfg"
-	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/version"
 )
 
 const (
@@ -52,7 +52,7 @@ func main() {
 	flag.Parse()
 
 	if *ver {
-		version.Show()
+		fmt.Print(version.FullString())
 		return
 	}
 
@@ -204,12 +204,12 @@ func main() {
 	}
 
 	if !*onlySetup && !*delete {
-		log.Infof("Starting %s %s", name, version.VersionStr())
+		log.Infof("Starting %s %s", name, version.String())
 		csLAPI = &csbouncer.StreamBouncer{
 			APIKey:         conf.CrowdSecLAPIKey,
 			APIUrl:         conf.CrowdSecLAPIUrl,
 			TickerInterval: conf.CrowdsecUpdateFrequencyYAML,
-			UserAgent:      fmt.Sprintf("%s/%s", name, version.VersionStr()),
+			UserAgent:      fmt.Sprintf("%s/%s", name, version.String()),
 			Opts: apiclient.DecisionsStreamOpts{
 				Scopes:                 "ip,range,as,country",
 				ScenariosNotContaining: strings.Join(conf.ExcludeScenariosContaining, ","),
