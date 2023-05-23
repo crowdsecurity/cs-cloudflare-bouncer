@@ -189,7 +189,7 @@ func Execute() error {
 				}()
 				err = worker.Init()
 				if err != nil {
-					return nil
+					return err
 				}
 				err = worker.DeleteExistingIPList()
 				return err
