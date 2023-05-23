@@ -93,7 +93,7 @@ func NewConfig(reader io.Reader) (*bouncerConfig, error) {
 
 	/*Configure logging*/
 	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil, false); err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 	if config.LogMode == "file" {
 		if config.LogDir == "" {
