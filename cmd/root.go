@@ -34,6 +34,23 @@ const (
 	name = "crowdsec-cloudflare-bouncer"
 )
 
+func newAPILogger(logDir string, logAPIRequests *bool) (*log.Logger, error) {
+	APILogger := log.New()
+	if *logAPIRequests {
+		f, err := os.OpenFile(
+			filepath.Join(logDir, "crowdsec-cloudflare-bouncer-api-calls.log"),
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return nil, err
+		}
+		APILogger.SetOutput(f)
+		APILogger.Level = log.DebugLevel
+	} else {
+		APILogger.SetOutput(io.Discard)
+	}
+	return APILogger, nil
+}
+
 func Execute() error {
 	// Create go routine per cloudflare account
 	// By using channels, after every nth second feed the decisions to each cf routine.
@@ -113,18 +130,9 @@ func Execute() error {
 		log.SetOutput(os.Stdout)
 	}
 
-	APILogger := log.New()
-	if *logAPIRequests {
-		f, err := os.OpenFile(
-			filepath.Join(conf.LogDir, "crowdsec-cloudflare-bouncer-api-calls.log"),
-			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
-			return err
-		}
-		APILogger.SetOutput(f)
-		APILogger.Level = log.DebugLevel
-	} else {
-		APILogger.SetOutput(io.Discard)
+	APILogger, err := newAPILogger(conf.LogDir, logAPIRequests)
+	if err != nil {
+		return err
 	}
 
 	var csLAPI *csbouncer.StreamBouncer
@@ -179,7 +187,6 @@ func Execute() error {
 				}
 				err = worker.SetUpCloudflareResources()
 				return err
-
 			})
 		} else if *delete {
 			workerTomb.Go(func() error {
