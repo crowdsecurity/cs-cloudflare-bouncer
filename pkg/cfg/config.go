@@ -13,6 +13,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
 
+	"github.com/crowdsecurity/go-cs-lib/pkg/csstring"
 	"github.com/crowdsecurity/go-cs-lib/pkg/ptr"
 	"github.com/crowdsecurity/go-cs-lib/pkg/yamlpatch"
 
@@ -84,7 +85,7 @@ func NewConfig(reader io.Reader) (*bouncerConfig, error) {
 		return nil, err
 	}
 
-	configBuff := os.ExpandEnv(string(content))
+	configBuff := csstring.StrictExpand(string(content), os.LookupEnv)
 
 	err = yaml.Unmarshal([]byte(configBuff), &config)
 	if err != nil {
