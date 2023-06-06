@@ -3,8 +3,6 @@ package cf
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -14,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 
@@ -195,7 +195,6 @@ var mockCfAPI cloudflareAPI = &mockCloudflareAPI{
 }
 
 func TestIPFirewallSetUp(t *testing.T) {
-
 	ctx := context.Background()
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -206,34 +205,21 @@ func TestIPFirewallSetUp(t *testing.T) {
 		TokenCallCount: &mockAPICallCounter,
 	}
 
-	if err := worker.Init(); err != nil {
-		t.Error(err)
-	}
+	err := worker.Init()
+	require.NoError(t, err)
 
-	if err := worker.SetUpCloudflareResources(); err != nil {
-		t.Error(err)
-	}
+	err = worker.SetUpCloudflareResources()
+	require.NoError(t, err)
 
 	ipLists, err := mockCfAPI.ListIPLists(ctx, "")
+	require.NoError(t, err)
+	require.Len(t, ipLists, 2)
 
-	if err != nil {
-		t.Error(err)
-	}
-	if len(ipLists) != 2 {
-		t.Errorf("expected only 2 IP list found %d", len(ipLists))
-	}
-
-	if ipLists[1].Description != "" {
-		t.Error("old iplist exists")
-	}
+	require.Empty(t, ipLists[1].Description, "old iplist exists")
 
 	fr, err := mockCfAPI.FirewallRules(ctx, "", cloudflare.PaginationOptions{})
-	if err != nil {
-		t.Error(err)
-	}
-	if len(fr) != 3 {
-		t.Errorf("expected only 3 firewall rule  found %d", len(fr))
-	}
+	require.NoError(t, err)
+	require.Len(t, fr, 3)
 }
 
 func TestCollectLAPIStream(t *testing.T) {
@@ -258,22 +244,15 @@ func TestCollectLAPIStream(t *testing.T) {
 		TokenCallCount: &mockAPICallCounter,
 	}
 
-	if err := worker.Init(); err != nil {
-		t.Error(err)
-	}
+	err := worker.Init()
+	require.NoError(t, err)
 
-	if err := worker.createMissingIPLists(); err != nil {
-		t.Error(err)
-	}
+	err = worker.createMissingIPLists()
+	require.NoError(t, err)
 
 	worker.CollectLAPIStream(dummyResponse)
-	if len(worker.NewIPDecisions) != 1 {
-		t.Errorf("expected 1 key in 'NewIPSet' but found %d", len(worker.NewIPDecisions))
-	}
-
-	if len(worker.ExpiredIPDecisions) != 1 {
-		t.Errorf("expected 1 key in 'ExpiredIPSet' but found %d", len(worker.ExpiredIPDecisions))
-	}
+	require.Len(t, worker.NewIPDecisions, 1)
+	require.Len(t, worker.ExpiredIPDecisions, 1)
 }
 
 func Test_setToExprList(t *testing.T) {
@@ -447,9 +426,8 @@ func Test_classifyDecisionsByAction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := dedupAndClassifyDecisionsByAction(tt.args.decisions); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("classifyDecisionsByAction() = %v, want %v", got, tt.want)
-			}
+			got := dedupAndClassifyDecisionsByAction(tt.args.decisions)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -563,19 +541,8 @@ func TestCloudflareWorker_SendASBans(t *testing.T) {
 			worker.Account = dummyCFAccount
 			worker.CFStateByAction[action] = &CloudflareState{AutonomousSystemSet: make(map[string]struct{})}
 			err := worker.SendASBans()
-			if err != nil {
-				t.Error(err)
-			}
-			found := make([]string, 0)
-			for f := range worker.CFStateByAction[action].AutonomousSystemSet {
-				found = append(found, f)
-			}
-			sort.Strings(found)
-			sort.Strings(tt.want)
-			if !reflect.DeepEqual(found, tt.want) {
-				t.Errorf("expected=%v found=%v ", tt.want, found)
-			}
-
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, maps.Keys(worker.CFStateByAction[action].AutonomousSystemSet))
 		})
 	}
 }
@@ -643,19 +610,8 @@ func TestCloudflareWorker_DeleteASBans(t *testing.T) {
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteASBans()
-			if err != nil {
-				t.Error(err)
-			}
-			found := make([]string, 0)
-			for f := range worker.CFStateByAction[action].AutonomousSystemSet {
-				found = append(found, f)
-			}
-			sort.Strings(found)
-			sort.Strings(tt.want)
-			if !reflect.DeepEqual(found, tt.want) {
-				t.Errorf("expected=%v found=%v ", tt.want, found)
-			}
-
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, maps.Keys(worker.CFStateByAction[action].AutonomousSystemSet))
 		})
 	}
 }
@@ -715,19 +671,8 @@ func TestCloudflareWorker_SendCountryBans(t *testing.T) {
 			worker.Account = dummyCFAccount
 			worker.CFStateByAction[action] = &CloudflareState{CountrySet: make(map[string]struct{})}
 			err := worker.SendCountryBans()
-			if err != nil {
-				t.Error(err)
-			}
-			found := make([]string, 0)
-			for f := range worker.CFStateByAction[action].CountrySet {
-				found = append(found, f)
-			}
-			sort.Strings(found)
-			sort.Strings(tt.want)
-			if !reflect.DeepEqual(found, tt.want) {
-				t.Errorf("expected=%v found=%v ", tt.want, found)
-			}
-
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, maps.Keys(worker.CFStateByAction[action].CountrySet))
 		})
 	}
 }
@@ -804,19 +749,8 @@ func TestCloudflareWorker_DeleteCountryBans(t *testing.T) {
 			}
 			worker.Account = dummyCFAccount
 			err := worker.DeleteCountryBans()
-			if err != nil {
-				t.Error(err)
-			}
-			found := make([]string, 0)
-			for f := range worker.CFStateByAction[action].CountrySet {
-				found = append(found, f)
-			}
-			sort.Strings(found)
-			sort.Strings(tt.want)
-			if !reflect.DeepEqual(found, tt.want) {
-				t.Errorf("expected=%v found=%v ", tt.want, found)
-			}
-
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, maps.Keys(worker.CFStateByAction[action].CountrySet))
 		})
 	}
 }
@@ -949,9 +883,7 @@ func TestCloudflareWorker_AddNewIPs(t *testing.T) {
 				TokenCallCount:  &mockAPICallCounter,
 			}
 			err := worker.UpdateIPLists()
-			if err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, err)
 			if !IPSetsAreEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
@@ -1032,9 +964,7 @@ func TestCloudflareWorker_DeleteIPs(t *testing.T) {
 				TokenCallCount:     &mockAPICallCounter,
 			}
 			err := worker.UpdateIPLists()
-			if err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, err)
 			if !IPSetsAreEqual(tt.want, worker.CFStateByAction["block"].IPListState.IPSet) {
 				t.Errorf("want=%+v, found=%+v", tt.want, worker.CFStateByAction["block"].IPListState.IPSet)
 			}
@@ -1090,15 +1020,13 @@ func Test_keepLatestNIPSetItems(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := keepLatestNIPSetItems(tt.args.set, tt.args.n); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("keepLatestNIPSetItems() = %v, want %v", got, tt.want)
-			}
+			got, _ := keepLatestNIPSetItems(tt.args.set, tt.args.n)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
 
 func Test_keepLatestNIPSetItemsBackwardCompat(t *testing.T) {
-
 	arg := map[string]IPSetItem{
 		"1.2.3.5": {CreatedAt: timeForMonth(time.May)},
 		"1.2.3.4": {CreatedAt: timeForMonth(time.May)},
@@ -1107,9 +1035,7 @@ func Test_keepLatestNIPSetItemsBackwardCompat(t *testing.T) {
 
 	for n := 1; n <= len(arg); n++ {
 		res, _ := keepLatestNIPSetItems(arg, n)
-		if len(res) != n {
-			t.Errorf("expected len(res)=%d, Got=%d", n, len(res))
-		}
+		require.Len(t, res, n)
 	}
 }
 
