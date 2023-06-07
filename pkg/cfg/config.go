@@ -167,7 +167,8 @@ func NewConfig(reader io.Reader) (*bouncerConfig, error) {
 			for _, a := range zone.Actions {
 				if _, ok := validAction[a]; !ok {
 					return nil, fmt.Errorf("invalid actions '%s', %s", a, validChoiceMsg)
-				} else if a == "challenge" {
+				}
+				if a == "challenge" {
 					zoneUsingChallenge = append(zoneUsingChallenge, zone.ID)
 				}
 				if a == account.DefaultAction {
@@ -193,6 +194,30 @@ func NewConfig(reader io.Reader) (*bouncerConfig, error) {
 		}
 	}
 	return config, nil
+}
+
+func lineComment(l string, zoneByID map[string]cloudflare.Zone, accountByID map[string]cloudflare.Account) string {
+	words := strings.Split(l, " ")
+	lastWord := words[len(words)-1]
+	if zone, ok := zoneByID[lastWord]; ok {
+		return zone.Name
+	}
+	if account, ok := accountByID[lastWord]; ok {
+		return account.Name
+	}
+	if strings.Contains(l, "total_ip_list_capacity") {
+		return "only this many latest IP decisions would be kept"
+	}
+	if strings.Contains(l, "exclude_scenarios_containing") {
+		return "ignore IPs banned for triggering scenarios containing either of provided word"
+	}
+	if strings.Contains(l, "include_scenarios_containing") {
+		return "ignore IPs banned for triggering scenarios not containing either of provided word"
+	}
+	if strings.Contains(l, "only_include_decisions_from") {
+		return `only include IPs banned due to decisions orginating from provided sources. eg value ["cscli", "crowdsec"]`
+	}
+	return ""
 }
 
 func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
@@ -276,22 +301,10 @@ func ConfigTokens(tokens string, baseConfigPath string) (string, error) {
 		)
 	}
 	for i, line := range lines {
-		words := strings.Split(line, " ")
-		lastWord := words[len(words)-1]
-		if zone, ok := zoneByID[lastWord]; ok {
-			line = fmt.Sprintf("%s #%s", line, zone.Name)
-		} else if account, ok := accountByID[lastWord]; ok {
-			line = fmt.Sprintf("%s #%s", line, account.Name)
-		} else if strings.Contains(line, "total_ip_list_capacity") {
-			line = fmt.Sprintf("%s #%s", line, " only this many latest IP decisions would be kept")
-		} else if strings.Contains(line, "exclude_scenarios_containing") {
-			line = fmt.Sprintf("%s #%s", line, " ignore IPs banned for triggering scenarios containing either of provided word")
-		} else if strings.Contains(line, "include_scenarios_containing") {
-			line = fmt.Sprintf("%s #%s", line, " ignore IPs banned for triggering scenarios not containing either of provided word")
-		} else if strings.Contains(line, "only_include_decisions_from") {
-			line = fmt.Sprintf("%s #%s", line, ` only include IPs banned due to decisions orginating from provided sources. eg value ["cscli", "crowdsec"]`)
+		comment := lineComment(line, zoneByID, accountByID)
+		if comment != "" {
+			lines[i] = line + " # " + comment
 		}
-		lines[i] = line
 	}
 
 	return strings.Join(lines, "\n"), nil
