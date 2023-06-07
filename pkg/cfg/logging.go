@@ -14,19 +14,22 @@ import (
 )
 
 type LoggingConfig struct {
+	LogLevel     *log.Level `yaml:"log_level"`
 	LogMode      string     `yaml:"log_mode"`
 	LogDir       string     `yaml:"log_dir"`
-	LogLevel     *log.Level `yaml:"log_level"`
-	CompressLogs *bool      `yaml:"compress_logs,omitempty"`
 	LogMaxSize   int        `yaml:"log_max_size,omitempty"`
 	LogMaxFiles  int        `yaml:"log_max_files,omitempty"`
 	LogMaxAge    int        `yaml:"log_max_age,omitempty"`
+	CompressLogs *bool      `yaml:"compress_logs,omitempty"`
 }
 
 func (c *LoggingConfig) LoggerForFile(fileName string) (io.Writer, error) {
 	if c.LogMode == "stdout" {
 		return os.Stderr, nil
 	}
+
+	// default permissions will be 0600 from lumberjack
+	// and are preserved if the file already exists
 
 	l := &lumberjack.Logger{
 		Filename:   filepath.Join(c.LogDir, fileName),
@@ -41,8 +44,7 @@ func (c *LoggingConfig) LoggerForFile(fileName string) (io.Writer, error) {
 
 func (c *LoggingConfig) setDefaults() {
 	if c.LogMode == "" {
-		// other bouncers have default = "stdout"
-		c.LogMode = "file"
+		c.LogMode = "stdout"
 	}
 
 	if c.LogDir == "" {
