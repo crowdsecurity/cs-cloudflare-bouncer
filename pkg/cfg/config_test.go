@@ -2,11 +2,13 @@ package cfg
 
 import (
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+
+	"github.com/crowdsecurity/go-cs-lib/pkg/cstest"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -17,7 +19,7 @@ func TestNewConfig(t *testing.T) {
 		name    string
 		args    args
 		want    *bouncerConfig
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "valid",
@@ -52,36 +54,25 @@ func TestNewConfig(t *testing.T) {
 				LogDir:   "/var/log/",
 				LogLevel: log.InfoLevel,
 			},
-			wantErr: false,
 		},
 		{
 			name:    "invalid time",
 			args:    args{"./testdata/invalid_config_time.yaml"},
-			want:    nil,
-			wantErr: true,
+			wantErr: "failed to unmarshal: yaml: unmarshal errors:\n  line 18: cannot unmarshal !!str `blah` into time.Duration",
 		},
 		{
 			name:    "invalid time",
 			args:    args{"./testdata/invalid_config_remedy.yaml"},
-			want:    nil,
-			wantErr: true,
+			wantErr: "zone test doesn't support the default action challenge for it's account",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader, err := os.Open(tt.args.configPath)
-			if err != nil {
-				t.Errorf("Open() error = %+v", err)
-				return
-			}
+			require.NoError(t, err)
 			got, err := NewConfig(reader)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewConfig() error = %+v, wantErr %+v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewConfig() = %+v, want %+v", got, tt.want)
-			}
+			cstest.RequireErrorContains(t, err, tt.wantErr)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

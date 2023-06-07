@@ -13,11 +13,10 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
 
+	"github.com/crowdsecurity/crowdsec/pkg/types"
 	"github.com/crowdsecurity/go-cs-lib/pkg/csstring"
 	"github.com/crowdsecurity/go-cs-lib/pkg/ptr"
 	"github.com/crowdsecurity/go-cs-lib/pkg/yamlpatch"
-
-	"github.com/crowdsecurity/crowdsec/pkg/types"
 )
 
 var TotalIPListCapacity int = 10000
