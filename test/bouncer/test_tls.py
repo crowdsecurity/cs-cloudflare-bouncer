@@ -70,12 +70,27 @@ def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factor
         port = cs.probe.get_bound_port('8080')
         cfg = cf_cfg_factory()
         cfg['crowdsec_lapi_url'] = f'https://localhost:{port}/'
-        cfg['cert_path'] = (certs / 'bouncer.crt').as_posix()
-        cfg['key_path'] = (certs / 'bouncer.key').as_posix()
         cfg['ca_cert_path'] = (certs / 'ca.crt').as_posix()
+
+        cfg['cert_path'] = (certs / 'agent.crt').as_posix()
+        cfg['key_path'] = (certs / 'agent.key').as_posix()
 
         with bouncer(cfg) as cf:
             cf.wait_for_lines_fnmatch([
+                "*Starting crowdsec-cloudflare-bouncer*",
                 "*Using CA cert*",
-                "*Using cert auth with cert*",
+                "*Using cert auth with cert * and key *",
+                "*API error: access forbidden*",
+            ])
+
+        cs.wait_for_log("*client certificate OU (?agent-ou?) doesn't match expected OU (?bouncer-ou?)*")
+
+        cfg['cert_path'] = (certs / 'bouncer.crt').as_posix()
+        cfg['key_path'] = (certs / 'bouncer.key').as_posix()
+
+        with bouncer(cfg) as cf:
+            cf.wait_for_lines_fnmatch([
+                "*Starting crowdsec-cloudflare-bouncer*",
+                "*Using CA cert*",
+                "*Using cert auth with cert * and key *",
             ])
