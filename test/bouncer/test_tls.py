@@ -1,3 +1,4 @@
+import json
 
 def test_tls_server(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factory):
     """TLS with server-only certificate"""
@@ -45,7 +46,7 @@ def test_tls_server(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factor
             ])
 
 
-def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factory):
+def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factory, bouncer_under_test):
     """TLS with two-way bouncer/lapi authentication"""
 
     lapi_env = {
@@ -94,3 +95,12 @@ def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factor
                 "*Using CA cert*",
                 "*Using cert auth with cert * and key *",
             ])
+
+            # check that the bouncer is registered
+            res = cs.cont.exec_run('cscli bouncers list -o json')
+            assert res.exit_code == 0
+            bouncers = json.loads(res.output)
+            assert len(bouncers) == 1
+            assert bouncers[0]['name'].startswith('@')
+            assert bouncers[0]['auth_type'] == 'tls'
+            assert bouncers[0]['type'] == bouncer_under_test
