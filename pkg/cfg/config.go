@@ -10,12 +10,9 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/crowdsecurity/crowdsec/pkg/types"
 	"github.com/crowdsecurity/go-cs-lib/pkg/csstring"
-	"github.com/crowdsecurity/go-cs-lib/pkg/ptr"
 	"github.com/crowdsecurity/go-cs-lib/pkg/yamlpatch"
 )
 
@@ -53,13 +50,7 @@ type bouncerConfig struct {
 	OnlyIncludeDecisionsFrom    []string         `yaml:"only_include_decisions_from"`
 	CloudflareConfig            CloudflareConfig `yaml:"cloudflare_config"`
 	Daemon                      bool             `yaml:"daemon"`
-	LogMode                     string           `yaml:"log_mode"`
-	LogDir                      string           `yaml:"log_dir"`
-	LogLevel                    log.Level        `yaml:"log_level"`
-	LogMaxSize                  int              `yaml:"log_max_size"`
-	LogMaxAge                   int              `yaml:"log_max_age"`
-	LogMaxFiles                 int              `yaml:"log_max_backups"`
-	CompressLogs                *bool            `yaml:"compress_logs"`
+	Logging                     LoggingConfig    `yaml:",inline"`
 	PrometheusConfig            PrometheusConfig `yaml:"prometheus"`
 	KeyPath                     string           `yaml:"key_path"`
 	CertPath                    string           `yaml:"cert_path"`
@@ -91,41 +82,8 @@ func NewConfig(reader io.Reader) (*bouncerConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal: %w", err)
 	}
 
-	/*Configure logging*/
-	if err = types.SetDefaultLoggerConfig(config.LogMode, config.LogDir, config.LogLevel, 0, 0, 0, nil, false); err != nil {
-		return nil, err
-	}
-	if config.LogMode == "file" {
-		if config.LogDir == "" {
-			config.LogDir = "/var/log/"
-		}
-		_maxsize := 40
-		if config.LogMaxSize != 0 {
-			_maxsize = config.LogMaxSize
-		}
-		_maxfiles := 3
-		if config.LogMaxFiles != 0 {
-			_maxfiles = config.LogMaxFiles
-		}
-		_maxage := 30
-		if config.LogMaxAge != 0 {
-			_maxage = config.LogMaxAge
-		}
-		_compress := true
-		if config.CompressLogs != nil {
-			_compress = *config.CompressLogs
-		}
-		logOutput := &lumberjack.Logger{
-			Filename:   config.LogDir + "/crowdsec-cloudflare-bouncer.log",
-			MaxSize:    _maxsize,
-			MaxBackups: _maxfiles,
-			MaxAge:     _maxage,
-			Compress:   _compress,
-		}
-		log.SetOutput(logOutput)
-		log.SetFormatter(&log.TextFormatter{TimestampFormat: "02-01-2006 15:04:05", FullTimestamp: true})
-	} else if config.LogMode != "stdout" {
-		return &bouncerConfig{}, fmt.Errorf("log mode '%s' unknown, expecting 'file' or 'stdout'", config.LogMode)
+	if err = config.Logging.setup("crowdsec-cloudflare-bouncer.log"); err != nil {
+		return nil, fmt.Errorf("failed to setup logging: %w", err)
 	}
 
 	accountIDSet := make(map[string]bool) // for verifying that each account ID is unique
@@ -314,9 +272,6 @@ func setDefaults(cfg *bouncerConfig) {
 	cfg.CrowdsecUpdateFrequencyYAML = "10s"
 
 	cfg.Daemon = true
-	cfg.LogMode = "file"
-	cfg.LogDir = "/var/log/"
-	cfg.LogLevel = log.InfoLevel
 	cfg.ExcludeScenariosContaining = []string{
 		"ssh",
 		"ftp",
@@ -328,10 +283,6 @@ func setDefaults(cfg *bouncerConfig) {
 		"crowdsec",
 		"lists",
 	}
-	cfg.LogMaxAge = 30
-	cfg.LogMaxSize = 40
-	cfg.CompressLogs = ptr.Of(true)
-	cfg.LogMaxFiles = 3
 
 	cfg.PrometheusConfig = PrometheusConfig{
 		Enabled:       true,

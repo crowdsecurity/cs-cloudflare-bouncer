@@ -17,7 +17,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/writer"
 	"gopkg.in/tomb.v2"
 
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
@@ -73,14 +72,6 @@ func Execute() error {
 		return nil
 	}
 
-	log.AddHook(&writer.Hook{ // Send logs with level fatal to stderr
-		Writer: os.Stderr,
-		LogLevels: []log.Level{
-			log.PanicLevel,
-			log.FatalLevel,
-		},
-	})
-
 	if *delete && *onlySetup {
 		return fmt.Errorf("conflicting cli arguments, pass only one of '-d' or '-s'")
 	}
@@ -130,7 +121,7 @@ func Execute() error {
 		log.SetOutput(os.Stdout)
 	}
 
-	APILogger, err := newAPILogger(conf.LogDir, logAPIRequests)
+	APILogger, err := newAPILogger(conf.Logging.LogDir, logAPIRequests)
 	if err != nil {
 		return err
 	}
