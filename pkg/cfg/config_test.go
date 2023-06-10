@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/crowdsecurity/go-cs-lib/pkg/cstest"
+	"github.com/crowdsecurity/go-cs-lib/pkg/ptr"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -50,9 +51,15 @@ func TestNewConfig(t *testing.T) {
 					UpdateFrequency: time.Second * 30,
 				},
 				Daemon:   false,
-				LogMode:  "stdout",
-				LogDir:   "/var/log/",
-				LogLevel: log.InfoLevel,
+				Logging: LoggingConfig{
+					LogMode:  "stdout",
+					LogDir:   "/var/log/",
+					LogLevel: ptr.Of(log.InfoLevel),
+					LogMaxSize: 40,
+					LogMaxFiles: 3,
+					LogMaxAge: 30,
+					CompressLogs: ptr.Of(true),
+				},
 			},
 		},
 		{
