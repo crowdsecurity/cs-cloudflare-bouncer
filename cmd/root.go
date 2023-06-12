@@ -9,19 +9,22 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/tomb.v2"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/crowdsecurity/go-cs-lib/pkg/csdaemon"
 	"github.com/crowdsecurity/go-cs-lib/pkg/version"
 
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cf"
@@ -30,8 +33,26 @@ import (
 
 const (
 	DEFAULT_CONFIG_PATH = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
-	name = "crowdsec-cloudflare-bouncer"
+	name                = "crowdsec-cloudflare-bouncer"
 )
+
+func HandleSignals(ctx context.Context) error {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT)
+
+	select {
+	case s := <-signalChan:
+		switch s {
+		case syscall.SIGTERM:
+			return fmt.Errorf("received SIGTERM")
+		case syscall.SIGINT:
+			return fmt.Errorf("received SIGINT")
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
+}
 
 func newAPILogger(logDir string, logAPIRequests *bool) (*log.Logger, error) {
 	APILogger := log.New()
@@ -112,11 +133,6 @@ func Execute() error {
 		return fmt.Errorf("unable to parse config: %w", err)
 	}
 
-	if *testConfig {
-		log.Info("config is valid")
-		return nil
-	}
-
 	if *delete || *onlySetup {
 		log.SetOutput(os.Stdout)
 	}
@@ -127,7 +143,6 @@ func Execute() error {
 	}
 
 	var csLAPI *csbouncer.StreamBouncer
-	ctx := context.Background()
 
 	zoneLocks := make([]cf.ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
@@ -136,10 +151,7 @@ func Execute() error {
 		}
 	}
 
-	var workerTomb tomb.Tomb
-	var serverTomb tomb.Tomb
-	var dispatchTomb tomb.Tomb
-
+	g, ctx := errgroup.WithContext(context.Background())
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 	APICountByToken := make(map[string]*uint32)
@@ -165,12 +177,8 @@ func Execute() error {
 			TokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
-			workerTomb.Go(func() error {
-				var err error = nil
-				defer func() {
-					workerTomb.Kill(err)
-				}()
-
+			g.Go(func() error {
+				var err error
 				worker.CFStateByAction = nil
 				err = worker.Init()
 				if err != nil {
@@ -180,21 +188,17 @@ func Execute() error {
 				return err
 			})
 		} else if *delete {
-			workerTomb.Go(func() error {
-				var err error = nil
-				defer func() {
-					workerTomb.Kill(err)
-				}()
+			g.Go(func() error {
+				var err error
 				err = worker.Init()
 				if err != nil {
 					return err
 				}
 				err = worker.DeleteExistingIPList()
 				return err
-
 			})
 		} else {
-			workerTomb.Go(func() error {
+			g.Go(func() error {
 				err := worker.Run()
 				return err
 			})
@@ -221,27 +225,35 @@ func Execute() error {
 		if err := csLAPI.Init(); err != nil {
 			return err
 		}
-		dispatchTomb.Go(func() error {
-			go func() {
-				csLAPI.Run()
-				log.Fatal("LAPI can't be reached")
-			}()
+		if *testConfig {
+			log.Info("config is valid")
+			return nil
+		}
+		g.Go(func() error {
+			csLAPI.Run(ctx)
+			return fmt.Errorf("crowdsec LAPI stream has stopped")
+		})
+		g.Go(func() error {
 			for {
 				// broadcast decision to each worker
-				decisions := <-csLAPI.Stream
-				for _, lapiStream := range lapiStreams {
-					lapiStream <- decisions
+				select {
+				case decisions := <-csLAPI.Stream:
+					for _, lapiStream := range lapiStreams {
+						stream := lapiStream
+						go func() { stream <- decisions }()
+					}
+				case <-ctx.Done():
+					return ctx.Err()
 				}
 			}
 		})
 	}
 
 	if conf.PrometheusConfig.Enabled {
-		serverTomb.Go(func() error {
+		go func() {
 			http.Handle("/metrics", promhttp.Handler())
-			err := http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil)
-			return err
-		})
+			log.Error(http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil))
+		}()
 	}
 
 	apiCallCounterWindow := time.NewTicker(time.Second)
@@ -254,27 +266,20 @@ func Execute() error {
 		}
 	}()
 
-	for {
-		select {
-		case <-workerTomb.Dying():
-			dispatchTomb.Kill(nil)
-			err := workerTomb.Err()
-			if err != nil {
-				return err
-			}
-			if *onlySetup || *delete {
-				if *delete {
-					log.Info("deleted all cf config")
+	_ = csdaemon.NotifySystemd(log.StandardLogger())
 
-				} else {
-					log.Info("setup complete")
-				}
-			}
-			return nil
-		case <-dispatchTomb.Dying():
-			workerTomb.Kill(nil)
-			return fmt.Errorf("dispatch is dying")
-		}
+	g.Go(func() error {
+		return HandleSignals(ctx)
+	})
+
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("process terminated with error: %w", err)
 	}
-
+	if *delete {
+		log.Info("deleted all cf config")
+	}
+	if *onlySetup {
+		log.Info("setup complete")
+	}
+	return nil
 }
