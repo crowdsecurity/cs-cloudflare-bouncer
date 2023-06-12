@@ -17,7 +17,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/tomb.v2"
+	"github.com/sirupsen/logrus/hooks/writer"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
@@ -30,7 +31,7 @@ import (
 
 const (
 	DEFAULT_CONFIG_PATH = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
-	name = "crowdsec-cloudflare-bouncer"
+	name                = "crowdsec-cloudflare-bouncer"
 )
 
 func newAPILogger(logDir string, logAPIRequests *bool) (*log.Logger, error) {
@@ -127,7 +128,6 @@ func Execute() error {
 	}
 
 	var csLAPI *csbouncer.StreamBouncer
-	ctx := context.Background()
 
 	zoneLocks := make([]cf.ZoneLock, 0)
 	for _, account := range conf.CloudflareConfig.Accounts {
@@ -136,10 +136,7 @@ func Execute() error {
 		}
 	}
 
-	var workerTomb tomb.Tomb
-	var serverTomb tomb.Tomb
-	var dispatchTomb tomb.Tomb
-
+	group, ctx := errgroup.WithContext(context.Background())
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 	APICountByToken := make(map[string]*uint32)
@@ -165,12 +162,8 @@ func Execute() error {
 			TokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
-			workerTomb.Go(func() error {
-				var err error = nil
-				defer func() {
-					workerTomb.Kill(err)
-				}()
-
+			group.Go(func() error {
+				var err error
 				worker.CFStateByAction = nil
 				err = worker.Init()
 				if err != nil {
@@ -180,21 +173,17 @@ func Execute() error {
 				return err
 			})
 		} else if *delete {
-			workerTomb.Go(func() error {
-				var err error = nil
-				defer func() {
-					workerTomb.Kill(err)
-				}()
+			group.Go(func() error {
+				var err error
 				err = worker.Init()
 				if err != nil {
 					return err
 				}
 				err = worker.DeleteExistingIPList()
 				return err
-
 			})
 		} else {
-			workerTomb.Go(func() error {
+			group.Go(func() error {
 				err := worker.Run()
 				return err
 			})
@@ -221,27 +210,35 @@ func Execute() error {
 		if err := csLAPI.Init(); err != nil {
 			return err
 		}
-		dispatchTomb.Go(func() error {
-			go func() {
-				csLAPI.Run()
-				log.Fatal("LAPI can't be reached")
-			}()
-			for {
-				// broadcast decision to each worker
-				decisions := <-csLAPI.Stream
-				for _, lapiStream := range lapiStreams {
-					lapiStream <- decisions
+		group.Go(func() error {
+			group.Go(func() error {
+				csLAPI.Run(ctx)
+				return fmt.Errorf("crowdsec LAPI stream has stopped")
+			})
+			group.Go(func() error {
+				for {
+					// broadcast decision to each worker
+					select {
+					case decisions := <-csLAPI.Stream:
+						for _, lapiStream := range lapiStreams {
+							stream := lapiStream
+							go func() { stream <- decisions }()
+						}
+					case <-ctx.Done():
+						return ctx.Err()
+					}
 				}
-			}
+			})
+			<-ctx.Done()
+			return ctx.Err()
 		})
 	}
 
 	if conf.PrometheusConfig.Enabled {
-		serverTomb.Go(func() error {
+		go func() {
 			http.Handle("/metrics", promhttp.Handler())
-			err := http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil)
-			return err
-		})
+			log.Error(http.ListenAndServe(net.JoinHostPort(conf.PrometheusConfig.ListenAddress, conf.PrometheusConfig.ListenPort), nil))
+		}()
 	}
 
 	apiCallCounterWindow := time.NewTicker(time.Second)
@@ -254,27 +251,14 @@ func Execute() error {
 		}
 	}()
 
-	for {
-		select {
-		case <-workerTomb.Dying():
-			dispatchTomb.Kill(nil)
-			err := workerTomb.Err()
-			if err != nil {
-				return err
-			}
-			if *onlySetup || *delete {
-				if *delete {
-					log.Info("deleted all cf config")
-
-				} else {
-					log.Info("setup complete")
-				}
-			}
-			return nil
-		case <-dispatchTomb.Dying():
-			workerTomb.Kill(nil)
-			return fmt.Errorf("dispatch is dying")
-		}
+	if err := group.Wait(); err != nil {
+		return err
 	}
-
+	if *delete {
+		log.Info("deleted all cf config")
+	}
+	if *onlySetup {
+		log.Info("setup complete")
+	}
+	return nil
 }

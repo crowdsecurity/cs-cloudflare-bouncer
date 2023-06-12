@@ -985,6 +985,9 @@ func (worker *CloudflareWorker) Run() error {
 	ticker := time.NewTicker(worker.UpdateFrequency)
 	for {
 		select {
+		case <-worker.Ctx.Done():
+			// worker.Logger.Info("context cancelled")
+			return worker.Ctx.Err()
 		case <-ticker.C:
 			worker.runProcessorOnDecisions(worker.UpdateIPLists, append(worker.NewIPDecisions, worker.ExpiredIPDecisions...))
 			worker.runProcessorOnDecisions(worker.DeleteCountryBans, worker.ExpiredCountryDecisions)
