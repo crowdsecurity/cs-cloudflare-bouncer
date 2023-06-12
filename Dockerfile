@@ -1,4 +1,4 @@
-ARG GOVERSION=1.20.4
+ARG GOVERSION=1.20.5
 
 FROM golang:${GOVERSION}-alpine AS build
 
