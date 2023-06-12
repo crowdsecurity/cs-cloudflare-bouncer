@@ -9,15 +9,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/writer"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
@@ -33,6 +34,24 @@ const (
 	DEFAULT_CONFIG_PATH = "/etc/crowdsec/bouncers/crowdsec-cloudflare-bouncer.yaml"
 	name                = "crowdsec-cloudflare-bouncer"
 )
+
+func HandleSignals(ctx context.Context) error {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT)
+
+	select {
+	case s := <-signalChan:
+		switch s {
+		case syscall.SIGTERM:
+			return fmt.Errorf("received SIGTERM")
+		case syscall.SIGINT:
+			return fmt.Errorf("received SIGINT")
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
+}
 
 func newAPILogger(logDir string, logAPIRequests *bool) (*log.Logger, error) {
 	APILogger := log.New()
@@ -136,7 +155,7 @@ func Execute() error {
 		}
 	}
 
-	group, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(context.Background())
 	// lapiStreams are used to forward the decisions to all the workers
 	lapiStreams := make([]chan *models.DecisionsStreamResponse, 0)
 	APICountByToken := make(map[string]*uint32)
@@ -162,7 +181,7 @@ func Execute() error {
 			TokenCallCount:  APICountByToken[account.Token],
 		}
 		if *onlySetup {
-			group.Go(func() error {
+			g.Go(func() error {
 				var err error
 				worker.CFStateByAction = nil
 				err = worker.Init()
@@ -173,7 +192,7 @@ func Execute() error {
 				return err
 			})
 		} else if *delete {
-			group.Go(func() error {
+			g.Go(func() error {
 				var err error
 				err = worker.Init()
 				if err != nil {
@@ -183,7 +202,7 @@ func Execute() error {
 				return err
 			})
 		} else {
-			group.Go(func() error {
+			g.Go(func() error {
 				err := worker.Run()
 				return err
 			})
@@ -210,12 +229,15 @@ func Execute() error {
 		if err := csLAPI.Init(); err != nil {
 			return err
 		}
-		group.Go(func() error {
-			group.Go(func() error {
+		g.Go(func() error {
+			return HandleSignals(ctx)
+		})
+		g.Go(func() error {
+			g.Go(func() error {
 				csLAPI.Run(ctx)
 				return fmt.Errorf("crowdsec LAPI stream has stopped")
 			})
-			group.Go(func() error {
+			g.Go(func() error {
 				for {
 					// broadcast decision to each worker
 					select {
@@ -251,7 +273,7 @@ func Execute() error {
 		}
 	}()
 
-	if err := group.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	if *delete {
