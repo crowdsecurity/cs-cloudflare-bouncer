@@ -24,6 +24,7 @@ import (
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	csbouncer "github.com/crowdsecurity/go-cs-bouncer"
+	"github.com/crowdsecurity/go-cs-lib/pkg/csdaemon"
 	"github.com/crowdsecurity/go-cs-lib/pkg/version"
 
 	"github.com/crowdsecurity/cs-cloudflare-bouncer/pkg/cf"
@@ -132,11 +133,6 @@ func Execute() error {
 		return fmt.Errorf("unable to parse config: %w", err)
 	}
 
-	if *testConfig {
-		log.Info("config is valid")
-		return nil
-	}
-
 	if *delete || *onlySetup {
 		log.SetOutput(os.Stdout)
 	}
@@ -229,30 +225,27 @@ func Execute() error {
 		if err := csLAPI.Init(); err != nil {
 			return err
 		}
+		if *testConfig {
+			log.Info("config is valid")
+			return nil
+		}
 		g.Go(func() error {
-			return HandleSignals(ctx)
+			csLAPI.Run(ctx)
+			return fmt.Errorf("crowdsec LAPI stream has stopped")
 		})
 		g.Go(func() error {
-			g.Go(func() error {
-				csLAPI.Run(ctx)
-				return fmt.Errorf("crowdsec LAPI stream has stopped")
-			})
-			g.Go(func() error {
-				for {
-					// broadcast decision to each worker
-					select {
-					case decisions := <-csLAPI.Stream:
-						for _, lapiStream := range lapiStreams {
-							stream := lapiStream
-							go func() { stream <- decisions }()
-						}
-					case <-ctx.Done():
-						return ctx.Err()
+			for {
+				// broadcast decision to each worker
+				select {
+				case decisions := <-csLAPI.Stream:
+					for _, lapiStream := range lapiStreams {
+						stream := lapiStream
+						go func() { stream <- decisions }()
 					}
+				case <-ctx.Done():
+					return ctx.Err()
 				}
-			})
-			<-ctx.Done()
-			return ctx.Err()
+			}
 		})
 	}
 
@@ -273,8 +266,14 @@ func Execute() error {
 		}
 	}()
 
+	_ = csdaemon.NotifySystemd(log.StandardLogger())
+
+	g.Go(func() error {
+		return HandleSignals(ctx)
+	})
+
 	if err := g.Wait(); err != nil {
-		return err
+		return fmt.Errorf("process terminated with error: %w", err)
 	}
 	if *delete {
 		log.Info("deleted all cf config")

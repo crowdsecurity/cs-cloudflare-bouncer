@@ -12,13 +12,15 @@ github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj
 github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97 h1:6s5vrqA+xVaVLjT1FxJoDBx2FpaV7ML4WkJvBY9I4zU=
 github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97/go.mod h1:MmAqiRfD8rjKEuUe4MYNHfHjYhFWfW7PNe12CCQWqPY=
+github.com/coreos/go-systemd/v22 v22.5.0 h1:RrqgGjYQKalulkV8NGVIfkXQf6YYmOyiJKk8iXXhfZs=
+github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/crowdsecurity/crowdsec v1.5.2 h1:2wl5ULsZlD8Du9PGe415x1fYRcOfVx95KI2Si0Qeb98=
 github.com/crowdsecurity/crowdsec v1.5.2/go.mod h1:R1wnz8wqV4r1teYt9Yc5PVTaBb37ug2yqCffIvXEuRw=
-github.com/crowdsecurity/go-cs-bouncer v0.0.5 h1:vZ989qKUDTavycjGLjqm2M6UzXJpmLaq35UoaiF9474=
-github.com/crowdsecurity/go-cs-bouncer v0.0.5/go.mod h1:ShrcSSYmzBTKnpqON9/UFvorDMhhn5mbeQC2HXCv7kE=
-github.com/crowdsecurity/go-cs-lib v0.0.0-20230522124854-671e895fa788 h1:1tjqkYUmbkbYqa21kZsgSWaPIwGyUW0xE/sbb1zpJHg=
-github.com/crowdsecurity/go-cs-lib v0.0.0-20230522124854-671e895fa788/go.mod h1:9JJLSpGj1ZXnROV3xAcJvS/HTaUvuA8K3gGOpO4tfVc=
+github.com/crowdsecurity/go-cs-bouncer v0.0.7 h1:uA2iTwiqZ6hDWONqjQI4uF5r2daGGCMEPtuW1DQGqug=
+github.com/crowdsecurity/go-cs-bouncer v0.0.7/go.mod h1:ShrcSSYmzBTKnpqON9/UFvorDMhhn5mbeQC2HXCv7kE=
+github.com/crowdsecurity/go-cs-lib v0.0.2 h1:+Tjmf/IclOXNzU9sxKVQvUl9CkMfbM60xQ0zA05NWps=
+github.com/crowdsecurity/go-cs-lib v0.0.2/go.mod h1:iznTJ19qLTYdZBcRb5RVDlcUdSlayBCivBkWsXlOY3g=
 github.com/crowdsecurity/grokky v0.2.1 h1:t4VYnDlAd0RjDM2SlILalbwfCrQxtJSMGdQOR0zwkE4=
 github.com/crowdsecurity/grokky v0.2.1/go.mod h1:33usDIYzGDsgX1kHAThCbseso6JuWNJXOzRQDGXHtWM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -91,6 +93,7 @@ github.com/gobuffalo/packr/v2 v2.2.0/go.mod h1:CaAwI0GPIAv+5wKLtv8Afwl+Cm78K/I/V
 github.com/gobuffalo/syncx v0.0.0-20190224160051-33c29581e754/go.mod h1:HhnNqWY95UYwwW3uSASeV7vtgYkT2t16hJgV3AEPUpw=
 github.com/goccy/go-yaml v1.11.0 h1:n7Z+zx8S9f9KgzG6KtQKf+kwqXZlLNR2F6018Dgau54=
 github.com/goccy/go-yaml v1.11.0/go.mod h1:H+mJrWtjPTJAHvRbV09MCK9xYwODM+wRTVFFTWckfng=
+github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
 github.com/golang/protobuf v1.5.3 h1:KhyjKVUg7Usr/dYsdSqoFveMYd5ko72D+zANwlG1mmg=

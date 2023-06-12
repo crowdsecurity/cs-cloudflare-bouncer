@@ -3,9 +3,11 @@ import pytest
 
 def test_no_api_key(crowdsec, bouncer, cf_cfg_factory):
     cfg = cf_cfg_factory()
+    cfg['crowdsec_lapi_url'] = 'http://localhost:8080'
+
     with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
-            "*no API key nor certificate provided*",
+            "*config does not contain LAPI key or certificate*",
         ])
         cf.proc.wait(timeout=0.2)
         assert not cf.proc.is_running()
@@ -14,13 +16,12 @@ def test_no_api_key(crowdsec, bouncer, cf_cfg_factory):
 
     with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
-            "*no API key nor certificate provided*",
+            "*config does not contain LAPI key or certificate*",
         ])
         cf.proc.wait(timeout=0.2)
         assert not cf.proc.is_running()
 
 
-@pytest.mark.skip(reason="BASEURL message - to fix")
 def test_no_lapi_url(bouncer, cf_cfg_factory):
     cfg = cf_cfg_factory()
 
@@ -28,7 +29,7 @@ def test_no_lapi_url(bouncer, cf_cfg_factory):
 
     with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
-            "*could not parse configuration: api_url is required*",
+            "*config does not contain LAPI url*",
         ])
         cf.proc.wait(timeout=0.2)
         assert not cf.proc.is_running()
@@ -37,7 +38,7 @@ def test_no_lapi_url(bouncer, cf_cfg_factory):
 
     with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
-            "*could not parse configuration: api_url is required*",
+            "*config does not contain LAPI url*",
         ])
         cf.proc.wait(timeout=0.2)
         assert not cf.proc.is_running()
@@ -52,7 +53,8 @@ def test_no_lapi(bouncer, cf_cfg_factory):
 
     with bouncer(cfg) as cf:
         cf.wait_for_lines_fnmatch([
-            "*LAPI can't be reached*"
+            "*connect: connection refused*",
+            "*process terminated with error: crowdsec LAPI stream has stopped*",
         ])
         cf.proc.wait(timeout=0.2)
         assert not cf.proc.is_running()
