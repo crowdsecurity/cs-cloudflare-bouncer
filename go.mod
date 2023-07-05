@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97
-	github.com/crowdsecurity/crowdsec v1.5.2
+	github.com/crowdsecurity/crowdsec v1.5.3-rc1
 	github.com/crowdsecurity/go-cs-bouncer v0.0.7
 	github.com/crowdsecurity/go-cs-lib v0.0.2
 	github.com/prometheus/client_golang v1.15.1
@@ -22,7 +22,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/crowdsecurity/grokky v0.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/go-openapi/analysis v0.21.4 // indirect
@@ -38,7 +37,6 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
-	github.com/magefile/mage v1.15.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
@@ -50,11 +48,9 @@ require (
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.10.0 // indirect
-	github.com/tetratelabs/wazero v1.1.0 // indirect
-	github.com/wasilibs/go-re2 v1.1.0 // indirect
 	go.mongodb.org/mongo-driver v1.11.6 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
