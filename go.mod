@@ -4,12 +4,12 @@ go 1.20
 
 require (
 	github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97
-	github.com/crowdsecurity/crowdsec v1.5.3-rc1
-	github.com/crowdsecurity/go-cs-bouncer v0.0.7
-	github.com/crowdsecurity/go-cs-lib v0.0.2
+	github.com/crowdsecurity/crowdsec v1.5.3-rc2.0.20230728143508-ffadd4277969
+	github.com/crowdsecurity/go-cs-bouncer v0.0.8-0.20230728143631-8e012f484d8f
+	github.com/crowdsecurity/go-cs-lib v0.0.3
 	github.com/prometheus/client_golang v1.15.1
-	github.com/sirupsen/logrus v1.9.2
-	github.com/stretchr/testify v1.8.3
+	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/sync v0.2.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -52,7 +52,7 @@ require (
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
-	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
+	golang.org/x/time v0.2.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
