@@ -7,5 +7,5 @@ Priority: optional
 Package: crowdsec-cloudflare-bouncer
 Provides: crowdsec-cloudflare-bouncer
 Depends: gettext-base
-Description: Custom bouncer for Crowdsec
+Description: Cloudflare bouncer for Crowdsec
 Architecture: any

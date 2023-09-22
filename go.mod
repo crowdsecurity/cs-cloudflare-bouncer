@@ -4,9 +4,9 @@ go 1.20
 
 require (
 	github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97
-	github.com/crowdsecurity/crowdsec v1.5.3-rc3
-	github.com/crowdsecurity/go-cs-bouncer v0.0.8
-	github.com/crowdsecurity/go-cs-lib v0.0.3
+	github.com/crowdsecurity/crowdsec v1.5.4-final
+	github.com/crowdsecurity/go-cs-bouncer v0.0.11
+	github.com/crowdsecurity/go-cs-lib v0.0.4
 	github.com/prometheus/client_golang v1.15.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
