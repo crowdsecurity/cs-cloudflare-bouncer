@@ -218,9 +218,10 @@ func Execute() error {
 				ScenariosContaining:    strings.Join(conf.IncludeScenariosContaining, ","),
 				Origins:                strings.Join(conf.OnlyIncludeDecisionsFrom, ","),
 			},
-			CertPath: conf.CertPath,
-			KeyPath:  conf.KeyPath,
-			CAPath:   conf.CAPath,
+			CertPath:           conf.CertPath,
+			KeyPath:            conf.KeyPath,
+			CAPath:             conf.CAPath,
+			InsecureSkipVerify: &conf.CrowdSecInsecureSkipVerify,
 		}
 		if err := csLAPI.Init(); err != nil {
 			return err
