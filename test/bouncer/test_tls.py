@@ -84,7 +84,7 @@ def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factor
                 "*API error: access forbidden*",
             ])
 
-        cs.wait_for_log("*client certificate OU (?agent-ou?) doesn't match expected OU (?bouncer-ou?)*")
+        cs.wait_for_log("*client certificate OU ?agent-ou? doesn't match expected OU ?bouncer-ou?*")
 
         cfg['cert_path'] = (certs / 'bouncer.crt').as_posix()
         cfg['key_path'] = (certs / 'bouncer.key').as_posix()
