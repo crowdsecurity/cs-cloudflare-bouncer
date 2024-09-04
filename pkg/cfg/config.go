@@ -44,6 +44,7 @@ type PrometheusConfig struct {
 type bouncerConfig struct {
 	CrowdSecLAPIUrl             string           `yaml:"crowdsec_lapi_url"`
 	CrowdSecLAPIKey             string           `yaml:"crowdsec_lapi_key"`
+	CrowdSecInsecureSkipVerify  bool             `yaml:"crowdsec_insecure_skip_verify"`
 	CrowdsecUpdateFrequencyYAML string           `yaml:"crowdsec_update_frequency"`
 	IncludeScenariosContaining  []string         `yaml:"include_scenarios_containing"`
 	ExcludeScenariosContaining  []string         `yaml:"exclude_scenarios_containing"`
