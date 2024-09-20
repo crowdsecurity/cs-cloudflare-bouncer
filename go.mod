@@ -1,6 +1,6 @@
 module github.com/crowdsecurity/cs-cloudflare-bouncer
 
-go 1.21
+go 1.22
 
 require (
 	github.com/cloudflare/cloudflare-go v0.40.1-0.20220527055342-b3795adaff97
