@@ -1,9 +1,6 @@
-BUILD_REQUIRE_GO_MAJOR ?= 1
-BUILD_REQUIRE_GO_MINOR ?= 20
-
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOTEST=$(GOCMD) test
+GO = go
+GOBUILD = $(GO) build
+GOTEST = $(GO) test
 
 BINARY_NAME=crowdsec-cloudflare-bouncer
 TARBALL_NAME=$(BINARY_NAME).tgz
@@ -55,7 +52,7 @@ clean: clean-release-dir clean-debian clean-rpm
 #
 
 .PHONY: binary
-binary: goversion
+binary:
 	$(GOBUILD) $(LD_OPTS) -o $(BINARY_NAME)
 
 .PHONY: build
@@ -80,7 +77,7 @@ export CF_TOKEN
 export CF_ZONE_ID
 
 .PHONY: test
-test: goversion
+test:
 	@$(GOTEST) $(LD_OPTS) ./...
 
 .PHONY: func-tests
@@ -96,7 +93,7 @@ RELDIR = $(BINARY_NAME)-$(BUILD_VERSION)
 
 .PHONY: vendor
 vendor: vendor-remove
-	$(GOCMD) mod vendor
+	$(GO) mod vendor
 	tar czf vendor.tgz vendor
 	tar --create --auto-compress --file=$(RELDIR)-vendor.tar.xz vendor
 
@@ -134,7 +131,5 @@ release: clean tarball
 #
 
 .PHONY: platform-all
-platform-all: goversion clean
+platform-all: clean
 	python3 .github/release.py run-build $(BINARY_NAME)
-
-include mk/goversion.mk
