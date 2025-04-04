@@ -1,0 +1,78 @@
+[project]
+name = "cs-cloudflare-bouncer-tests"
+version = "0.1.0"
+description = "Tests for cs-cloudflare-bouncer"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pexpect>=4.9.0",
+    "pytest>=8.3.5",
+    "pytest-cs>=0.7.21",
+    "pytest-dependency>=0.6.0",
+    "pytest-dotenv>=0.5.2",
+    "zxcvbn>=4.5.0",
+]
+
+[tool.uv.sources]
+pytest-cs = { git = "https://github.com/crowdsecurity/pytest-cs" }
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.28.4",
+    "ipdb>=0.13.13",
+    "ruff>=0.11.2",
+]
+
+[tool.ruff]
+
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+  "ALL"
+]
+
+ignore = [
+    "ANN",      # Missing type annotations
+    "ARG001",   # Unused function argument: `...`
+    "COM812",   # Trailing comma missing
+    "D100",     # Missing docstring in public module
+    "D103",     # Missing docstring in public function
+    "D104",     # Missing docstring in public package
+    "D203",     # incorrect-blank-line-before-class
+    "D212",     # Multi-line docstring summary should start at the first line
+    "D400",     # First line should end with a period
+    "D415",     # First line should end with a period, question mark, or exclamation point
+    "ERA001",
+    "FIX002",   # Line contains TODO, consider resolving the issue
+    "FIX003",   # Line contains XXX, consider resolving the issue
+    "PLW1510",  # `subprocess.run` without explicit `check` argument
+    "S101",     # Use of 'assert' detected
+    "S603",     # `subprocess` call: check for execution of untrusted input
+    "S607",     # Starting a process with a partial executable path
+    "TD",
+    "PLR2004",  # Magic value used in comparison, consider replacing `...` with a constant variable
+    "PLR0913",  # Too many arguments in function definition (6 > 5)
+    "PTH107",   # `os.remove()` should be replaced by `Path.unlink()`
+    "PTH108",   # `os.unlink()` should be replaced by `Path.unlink()`
+    "PTH110",   # `os.path.exists()` should be replaced by `Path.exists()`
+    "PTH116",   # `os.stat()` should be replaced by `Path.stat()`, `Path.owner()`, or `Path.group()`
+    "PTH123",   # `open()` should be replaced by `Path.open()`
+    "PT022",    # No teardown in fixture `fw_cfg_factory`, use `return` instead of `yield`
+    "UP022",    # Prefer `capture_output` over sending `stdout` and `stderr` to `PIPE`
+    "Q000",
+]
+
+[tool.basedpyright]
+reportAny = "none"
+reportArgumentType = "none"
+reportAttributeAccessIssue = "none"
+reportMissingParameterType = "none"
+reportMissingTypeStubs = "none"
+reportOptionalMemberAccess = "none"
+reportUnknownArgumentType = "none"
+reportUnknownMemberType = "none"
+reportUnknownParameterType = "none"
+reportUnknownVariableType = "none"
+reportUnusedCallResult = "none"
+reportUnusedParameter = "none"
