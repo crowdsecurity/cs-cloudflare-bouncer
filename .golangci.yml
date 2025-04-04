@@ -1,0 +1,184 @@
+version: "2"
+
+linters:
+  default: all
+  disable:
+    - depguard
+    - recvcheck
+    - dupl
+    - misspell
+    - nolintlint
+    - forbidigo
+    - interfacebloat
+    - perfsprint
+    - unparam
+    - maintidx
+    - containedctx
+    - promlinter
+    - predeclared
+    - nestif
+    - ireturn
+    - cyclop    # revive
+    - funlen    # revive
+    - gocognit  # revive
+    - gocyclo   # revive
+    - lll       # revive
+    - godot                 # Check if comments end in a period
+    - gosec                 # (gas): Inspects source code for security problems
+    - wrapcheck             # Checks that errors returned from external packages are wrapped
+    - mnd                   # An analyzer to detect magic numbers.
+    - nlreturn              # nlreturn checks for a new line before return and branch statements to increase code clarity
+    - whitespace            # Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc.
+    - wsl                   # add or remove empty lines
+    - godox                 # Tool for detection of FIXME, TODO and other comment keywords
+    - err113                # Go linter to check the errors handling expressions
+    - paralleltest          # Detects missing usage of t.Parallel() method in your Go test
+    - testpackage           # linter that makes you use a separate _test package
+    - exhaustruct           # Checks if all structure fields are initialized
+    - gochecknoglobals      # Check that no global variables exist.
+    - goconst               # Finds repeated strings that could be replaced by a constant
+    - tagliatelle           # Checks the struct tags.
+    - varnamelen            # checks that the length of a variable's name matches its scope
+
+  settings:
+
+    errcheck:
+      check-type-assertions: false
+
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - builtinShadow
+        - captLocal
+        - commentedOutCode
+        - deferInLoop             #
+        - emptyStringTest
+        - hugeParam
+        - ifElseChain
+        - octalLiteral
+        - paramTypeCombine
+        - rangeValCopy
+        - sprintfQuotedString
+        - typeUnparen
+        - unnamedResult
+        - whyNoLint
+
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+
+    maintidx:
+      # raise this after refactoring
+      under: 17
+
+    misspell:
+      locale: US
+
+    nlreturn:
+      block-size: 5
+
+    nolintlint:
+      require-explanation: false  # don't require an explanation for nolint directives
+      require-specific: false     # don't require nolint directives to be specific about which linter is being skipped
+      allow-unused: false         # report any unused nolint directives
+
+    revive:
+      severity: error
+      enable-all-rules: true
+      rules:
+        - name: add-constant
+          disabled: true
+        - name: cognitive-complexity
+          arguments:
+            # lower this after refactoring
+            - 84
+        - name: defer
+          disabled: true
+        - name: confusing-results
+          disabled: true
+        - name: cyclomatic
+          arguments:
+            # lower this after refactoring
+            - 40
+        - name: empty-lines
+          disabled: true
+        - name: flag-parameter
+          disabled: true
+        - name: function-length
+          arguments:
+            # lower this after refactoring
+            - 88
+            - 211
+        - name: indent-error-flow
+          disabled: true
+        - name: line-length-limit
+          arguments:
+            # lower this after refactoring
+            - 213
+        - name: max-public-structs
+          disabled: true
+        - name: redefines-builtin-id
+          disabled: true
+        - name: superfluous-else
+          disabled: true
+        - name: unexported-naming
+          disabled: true
+        - name: unexported-return
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: unused-parameter
+          disabled: true
+        - name: unused-receiver
+          disabled: true
+        - name: use-errors-new
+          disabled: true
+        - name: var-declaration
+          disabled: true
+
+    staticcheck:
+      checks:
+        - all
+        - -ST1003
+
+    wsl:
+      # Allow blocks to end with comments
+      allow-trailing-comment: true
+
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+
+      # `err` is often shadowed, we may continue to do it
+      - linters:
+          - govet
+        text: 'shadow: declaration of "(err|ctx)" shadows declaration'
+
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/crowdsecurity)
+        - prefix(github.com/crowdsecurity/cs-cloudflare-bouncer)
+
+  exclusions:
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
