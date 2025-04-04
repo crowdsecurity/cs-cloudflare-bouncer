@@ -2,9 +2,9 @@ import contextlib
 
 import pytest
 
-from pytest_cs import plugin
+# from pytest_cs import plugin
 
-pytest_exception_interact = plugin.pytest_exception_interact
+# pytest_exception_interact = plugin.pytest_exception_interact
 
 
 # provide the name of the bouncer binary to test

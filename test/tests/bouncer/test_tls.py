@@ -1,8 +1,8 @@
 import json
 
+
 def test_tls_server(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factory):
     """TLS with server-only certificate"""
-
     api_key = api_key_factory()
 
     lapi_env = {
@@ -48,7 +48,6 @@ def test_tls_server(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factor
 
 def test_tls_mutual(crowdsec, certs_dir, api_key_factory, bouncer, cf_cfg_factory, bouncer_under_test):
     """TLS with two-way bouncer/lapi authentication"""
-
     lapi_env = {
         'CACERT_FILE': '/etc/ssl/crowdsec/ca.crt',
         'LAPI_CERT_FILE': '/etc/ssl/crowdsec/lapi.crt',

@@ -1,9 +1,9 @@
 import os
 import subprocess
-import yaml
 from pathlib import Path
 
 import pytest
+import yaml
 from zxcvbn import zxcvbn
 
 pytestmark = pytest.mark.deb
@@ -84,7 +84,6 @@ def test_deb_install_purge_yaml_local(deb_package_path, bouncer_under_test, must
 
     => the configuration files are not touched (no new api key)
     """
-
     assert deb_package_path.exists(), f'This test requires {deb_package_path}'
 
     p = subprocess.check_output(

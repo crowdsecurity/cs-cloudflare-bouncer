@@ -1,14 +1,14 @@
 import os
-import pexpect
-import yaml
 
+import pexpect
 import pytest
+import yaml
 
 BOUNCER = "crowdsec-cloudflare-bouncer"
 CONFIG = f"/etc/crowdsec/bouncers/{BOUNCER}.yaml"
 
 
-@pytest.mark.dependency()
+@pytest.mark.dependency
 def test_install_no_crowdsec(project_repo, bouncer_binary, must_be_root):
     c = pexpect.spawn(
         '/usr/bin/sh', ['scripts/install.sh'],

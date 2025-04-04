@@ -1,5 +1,3 @@
-import pytest
-
 
 def test_no_api_key(crowdsec, bouncer, cf_cfg_factory):
     cfg = cf_cfg_factory()
